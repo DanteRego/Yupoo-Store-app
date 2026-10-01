@@ -135,6 +135,7 @@ func (a *App) routes() http.Handler {
 	}
 	mux.HandleFunc("/{$}", static("library.html", "text/html; charset=utf-8"))
 	mux.HandleFunc("/teams.js", static("teams.js", "text/javascript; charset=utf-8"))
+	mux.HandleFunc("/categories.js", static("categories.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/library.js", static("library.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/crawlbar.js", static("crawlbar.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/icon.svg", static("icon.svg", "image/svg+xml"))
@@ -214,6 +215,32 @@ func (a *App) routes() http.Handler {
 			return nil, err
 		}
 		a.lib.SetStoreName(in.Store, in.Name)
+		return true, nil
+	}))
+	mux.HandleFunc("POST /api/category", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in struct{ Key, Category string }
+		if err := decode(r, &in); err != nil {
+			return nil, err
+		}
+		a.lib.SetCategory(in.Key, in.Category)
+		return true, nil
+	}))
+	mux.HandleFunc("POST /api/categories", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in struct {
+			Keys     []string
+			Category string
+		}
+		if err := decode(r, &in); err != nil {
+			return nil, err
+		}
+		return map[string]int{"changed": a.lib.SetCategories(in.Keys, in.Category)}, nil
+	}))
+	mux.HandleFunc("POST /api/store-category", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in struct{ Store, Category string }
+		if err := decode(r, &in); err != nil {
+			return nil, err
+		}
+		a.lib.SetStoreCategory(in.Store, in.Category)
 		return true, nil
 	}))
 	mux.HandleFunc("POST /api/remove", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {

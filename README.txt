@@ -24,7 +24,10 @@ USING IT
                         (about 2 seconds per page so Yupoo doesn't block you)
     Library           - back to your library
 - In the library:
-    Teams    - search in English or Chinese ("liv" or "利物浦"), across all stores
+    Categories - what each item is (Shirts › Football Kit, Shoes › Sneakers…)
+               🏷 on a card changes one item; 🏷 next to a store sets what
+               that store sells (used when a title doesn't say)
+    Teams    - for clothing only; search in English or Chinese ("liv" or "利物浦")
     Stores   - narrow to one supplier; "open" jumps back into that store,
                ✎ gives the store your own name
     Filters  - the dropdowns above the items (team, season, kit type, extras,

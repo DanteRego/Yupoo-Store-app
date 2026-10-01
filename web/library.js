@@ -3,11 +3,12 @@ const TOKEN = document.querySelector('meta[name="kit-token"]').content;
 const PAGE_SIZE = 120;
 
 const S = {
-  lib: { albums: {} }, aliases: {}, myTeams: {}, settings: { autoSave: true }, storeNames: {},
-  team: "", store: "", kit: "", season: "", extra: "", q: "", teamQ: "", sort: "team", shown: PAGE_SIZE
+  lib: { albums: {} }, aliases: {}, myTeams: {}, settings: { autoSave: true }, storeNames: {}, storeCats: {},
+  cat: "", team: "", store: "", kit: "", season: "", extra: "", q: "", teamQ: "", sort: "team", shown: PAGE_SIZE
 };
 // The dropdown filters above the items. "f" is the name of the filter in S.
 const FILTERS = [
+  { f: "cat", label: "Category", any: "Any category" },
   { f: "team", label: "Team", any: "Any team" },
   { f: "season", label: "Season", any: "Any season" },
   { f: "kit", label: "Kit type", any: "Any kit type" },
@@ -54,6 +55,7 @@ async function load() {
   S.myTeams = d.myTeams || {};
   S.settings = Object.assign({ autoSave: true }, d.settings || {});
   S.storeNames = d.storeNames || {};
+  S.storeCats = d.storeCategories || {};
   matcher = YO_buildMatcher(allAliases());
   cache.clear();
 }
@@ -63,16 +65,28 @@ const allAliases = () => Object.assign({}, S.aliases, S.myTeams);
 // Your own name for a store (set with ✎ in the Stores list), or its original name.
 const storeName = (s) => S.storeNames[s] || s;
 
+// Everything the Library knows about an item: what it is (the item sorter, categories.js) and,
+// for clothing, the team, season, kit type and extras (teams.js).
 function info(a) {
-  const ck = a.key + "|" + a.title;
-  let p = cache.get(ck);
-  if (!p) { p = YO_parse(a.title, matcher); cache.set(ck, p); }
-  if (a.team) {
-    const q = Object.assign({}, p, { team: a.team, edited: true });
-    q.english = YO_english(q);
-    return q;
-  }
-  return p;
+  const storeCat = S.storeCats[a.store] || "";
+  const ck = [a.key, a.title, a.team || "", a.category || "", storeCat].join("|");
+  let r = cache.get(ck);
+  if (r) return r;
+  const p = YO_parse(a.title, matcher);
+  const c = YO_categorize(a.title, p, a.category, storeCat);
+  const clothing = YO_CLOTHING.indexOf(c.category) !== -1;
+  const kit = c.sub === "Football Kit";
+  r = Object.assign({}, p, {
+    category: c.category, sub: c.sub, catPath: c.category + (c.sub ? " › " + c.sub : ""), catHow: c.how,
+    clothing, footballKit: kit, catEdited: c.how === "yours"
+  });
+  if (!clothing) Object.assign(r, { team: null, season: null, seasonKey: null, kit: null, extras: [] });
+  else if (!kit) r.kit = null;
+  if (clothing && a.team) Object.assign(r, { team: a.team, edited: true });
+  // Football kits get the "Liverpool 2024/25 Home" style name; everything else a tidied-up title.
+  r.english = r.team || kit ? YO_english(r) : YO_cleanName(a.title);
+  cache.set(ck, r);
+  return r;
 }
 
 // ---------- sidebar ----------
@@ -85,22 +99,49 @@ function teamMatches(team, q) {
 }
 const item = (attr, val, label, n, active, extra, openUrl, renameStore) =>
   `<div class="item ${active ? "on" : ""} ${extra || ""}" role="button" tabindex="0" data-${attr}="${esc(val)}"><span class="name" title="${esc(label)}">${esc(label)}</span>` +
-  (renameStore ? `<button class="ren" data-rename-store="${esc(val)}" title="Rename this store">✎</button>` : "") +
+  (renameStore ? `<button class="ren" data-store-cat="${esc(val)}" title="What this store sells${S.storeCats[val] ? ": " + esc(S.storeCats[val]) : ""}">🏷</button>` +
+    `<button class="ren" data-rename-store="${esc(val)}" title="Rename this store">✎</button>` : "") +
   (openUrl ? `<a class="open" href="${esc(openUrl)}" title="Open this store">open ↗</a>` : "") +
   `<span class="c">${n}</span></div>`;
 
-function renderTeams() {
+// Categories, with their subcategories underneath (only the ones that have items).
+function renderCats() {
   const inStore = all().filter((a) => !S.store || a.store === S.store);
-  const counts = new Map(); let unsorted = 0;
+  const counts = new Map();
   inStore.forEach((a) => {
-    const t = info(a).team;
-    if (t) counts.set(t, (counts.get(t) || 0) + 1); else unsorted++;
+    const p = info(a);
+    counts.set(p.category, (counts.get(p.category) || 0) + 1);
+    if (p.sub) counts.set(p.catPath, (counts.get(p.catPath) || 0) + 1);
+  });
+  const paths = YO_categoryPaths();
+  // Categories you typed yourself that aren't in categories.js still get listed.
+  [...counts.keys()].forEach((k) => { if (paths.indexOf(k) === -1) paths.push(k); });
+  let html = item("cat", "", "All items", inStore.length, S.cat === "");
+  paths.sort((a, b) => catRank(a) - catRank(b)).forEach((path) => {
+    if (!counts.get(path)) return;
+    const sub = path.indexOf(" › ") !== -1;
+    html += item("cat", path, sub ? path.split(" › ")[1] : path, counts.get(path), S.cat === path, sub ? "sub" : "top");
+  });
+  $(".cats").innerHTML = html;
+}
+const catRank = (path) => { const [c, s] = path.split(" › "); return YO_categoryRank(c, s || ""); };
+
+// Teams only apply to clothing; this list counts the clothing in the chosen store and category.
+function renderTeams() {
+  const scope = all().filter((a) => (!S.store || a.store === S.store) && (!S.cat || vals(a, "cat").includes(S.cat)));
+  const counts = new Map(); let unsorted = 0, clothing = 0;
+  scope.forEach((a) => {
+    const p = info(a);
+    if (!p.clothing) return;
+    clothing++;
+    if (p.team) counts.set(p.team, (counts.get(p.team) || 0) + 1);
+    else if (p.footballKit) unsorted++;
   });
   const q = S.teamQ.toLowerCase().trim();
   let html = "";
   if (!q) {
-    html += item("team", "", "All teams", inStore.length, S.team === "");
-    if (unsorted) html += item("team", "__unsorted", "⚠ Unsorted", unsorted, S.team === "__unsorted", "warn");
+    html += item("team", "", "All teams", clothing, S.team === "");
+    if (unsorted) html += item("team", "__unsorted", "⚠ Kits with no team", unsorted, S.team === "__unsorted", "warn");
   }
   [...counts.keys()].sort((a, b) => a.localeCompare(b)).filter((t) => teamMatches(t, q))
     .forEach((t) => { html += item("team", t, t, counts.get(t), S.team === t); });
@@ -122,19 +163,21 @@ function renderStores() {
 // What an item counts as for each filter. "—" means the title doesn't say.
 function vals(a, f) {
   const p = info(a);
-  if (f === "team") return [p.team || "__unsorted"];
+  if (f === "cat") return p.sub ? [p.category, p.catPath] : [p.category];
+  if (f === "team") return [p.team || (p.footballKit ? "__unsorted" : "—")];
   if (f === "season") return [p.season || "—"];
   if (f === "kit") return [p.kit || "—"];
   if (f === "extra") return p.extras.length ? p.extras : ["—"];
   return [a.store];
 }
 function optionLabel(f, v) {
-  if (v === "__unsorted") return "⚠ Unsorted";
-  if (v === "—") return { season: "No season in title", kit: "No kit type in title", extra: "No extras" }[f];
+  if (v === "__unsorted") return "⚠ Kits with no team";
+  if (v === "—") return { team: "No team", season: "No season", kit: "No kit type", extra: "No extras" }[f];
   return f === "store" ? storeName(v) : v;
 }
 const KIT_ORDER = ["Home", "Away", "Second Away", "Third", "Goalkeeper", "Training", "Pre-Match"];
 function optionOrder(f) {
+  if (f === "cat") return (a, b) => catRank(a) - catRank(b) || a.localeCompare(b);
   if (f === "season") return (a, b) => (parseInt(b, 10) || 0) - (parseInt(a, 10) || 0) || b.localeCompare(a);
   if (f === "kit") return (a, b) => (a === "—") - (b === "—") || KIT_ORDER.indexOf(a) - KIT_ORDER.indexOf(b);
   return (a, b) => (a === "__unsorted" ? -1 : b === "__unsorted" ? 1 : 0) || (a === "—") - (b === "—") ||
@@ -209,7 +252,8 @@ function passes(a, skip) {
   }
   const words = S.q.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length) {
-    const hay = (info(a).english + " " + a.title + " " + a.store + " " + storeName(a.store)).toLowerCase();
+    const p = info(a);
+    const hay = (p.english + " " + p.catPath + " " + a.title + " " + a.store + " " + storeName(a.store)).toLowerCase();
     if (!words.every((w) => hay.includes(w))) return false;
   }
   return true;
@@ -223,8 +267,10 @@ function filtered() {
     if (!ta !== !tb) return ta ? -1 : 1; // unsorted last
     return (ta || "").localeCompare(tb || "");
   };
+  const byCat = (a, b) => { const pa = info(a), pb = info(b); return YO_categoryRank(pa.category, pa.sub) - YO_categoryRank(pb.category, pb.sub); };
+  const byName = (a, b) => info(a).english.localeCompare(info(b).english);
   const cmp = {
-    team: (a, b) => byTeam(a, b) || (sk(b) || 0) - (sk(a) || 0),
+    team: (a, b) => byCat(a, b) || byTeam(a, b) || (sk(b) || 0) - (sk(a) || 0) || byName(a, b),
     new: (a, b) => (sk(b) || 0) - (sk(a) || 0),
     old: (a, b) => (sk(a) || 9999) - (sk(b) || 9999),
     saved: (a, b) => (b.firstSeen || 0) - (a.firstSeen || 0)
@@ -262,12 +308,14 @@ function renderGrid() {
         ${a.count ? `<span class="n">${a.count} photos</span>` : ""}
       </a>
       <div class="meta">
-        <div class="en ${p.team ? "" : "unsorted"}">${esc(p.english)}</div>
-        <div class="zh">${esc(a.title)}</div>
+        <div class="catline ${p.category === "Other" ? "unsorted" : ""}">${esc(p.catPath)}${p.catEdited ? ` · <span class="tag">your pick</span>` : ""}</div>
+        <div class="en ${p.footballKit && !p.team ? "unsorted" : ""}">${esc(p.english)}</div>
+        ${p.english !== a.title ? `<div class="zh">${esc(a.title)}</div>` : ""}
         <div class="src">${esc(storeName(a.store))} · saved ${esc(fmtDate(a.firstSeen))}${p.edited ? ` · <span class="tag">your fix</span>` : ""}</div>
         <div class="row">
           <a href="${esc(a.link)}">Open album ↗</a>
-          <button data-edit="${esc(a.key)}" title="Set the team">✎ Team</button>
+          <button data-cat-edit="${esc(a.key)}" title="Change what this item is">🏷</button>
+          ${p.clothing ? `<button data-edit="${esc(a.key)}" title="Set the team">✎ Team</button>` : ""}
           <button data-remove="${esc(a.key)}" title="Remove from library">🗑</button>
         </div>
       </div>
@@ -290,7 +338,7 @@ function loadThumb(img, attempt) {
   img.src = "/thumb/" + encodeURIComponent(img.dataset.key.replace(/[^A-Za-z0-9._-]/g, "_")) + (attempt ? "?r=" + attempt : "");
 }
 
-function update() { renderTeams(); renderStores(); renderFilters(); renderGrid(); }
+function update() { renderCats(); renderTeams(); renderStores(); renderFilters(); renderGrid(); }
 function renderAll() {
   update();
   $(".autosave").checked = S.settings.autoSave;
@@ -333,13 +381,48 @@ async function renameStore(store) {
   await refresh();
 }
 
+// Asks for a category: a number from the list, or a name like "Shoes › Sneakers" or just "Sneakers".
+// Returns the chosen path, "" for "work it out automatically", or null if cancelled.
+function chooseCategory(heading, current, emptyMeans) {
+  const paths = YO_categoryPaths();
+  const list = paths.map((p, i) => `${i + 1}. ${p.indexOf(" › ") !== -1 ? "      " + p.split(" › ")[1] : p}`).join("\n");
+  const input = prompt(`${heading}\n\n${list}\n\nType a number, or a name. Leave empty ${emptyMeans}.`, current || "");
+  if (input === null) return null;
+  const t = input.trim();
+  if (!t) return "";
+  if (/^\d+$/.test(t) && paths[+t - 1]) return paths[+t - 1];
+  const low = t.toLowerCase().replace(/\s*[>›]\s*/g, " › ");
+  return paths.find((p) => p.toLowerCase() === low) ||
+    paths.find((p) => p.toLowerCase().endsWith("› " + low)) ||
+    t.replace(/\s*[>›]\s*/g, " › "); // a new name of your own
+}
+
+async function setItemCategory(key) {
+  const a = S.lib.albums[key]; if (!a) return;
+  const p = info(a);
+  const how = { word: "from a word in its title", store: "from the store's 🏷 setting", sizes: "from the shoe sizes in its title",
+    team: "because a team was found in its title", none: "nothing in its title said", yours: "your pick" }[p.catHow];
+  const pick = chooseCategory(`What is this item?\n\n${a.title}\n\nRight now: ${p.catPath} (${how})`, a.category || p.catPath, "to let the sorter decide");
+  if (pick === null) return;
+  await call("POST", "/api/category", { key, category: pick });
+  await refresh();
+}
+
+async function setStoreCategory(store) {
+  const pick = chooseCategory(`What does ${storeName(store)} sell?\n\nUsed for this store's items when their titles don't say what they are.`,
+    S.storeCats[store] || "", "for no default");
+  if (pick === null) return;
+  await call("POST", "/api/store-category", { store, category: pick });
+  await refresh();
+}
+
 const today = () => new Date().toISOString().slice(0, 10);
 
 async function exportCsv() {
-  const rows = [["English name", "Team", "Season", "Kit type", "Extras", "Store", "Original title", "Photos", "Album link", "Saved"]];
+  const rows = [["Name", "Category", "Subcategory", "Team", "Season", "Kit type", "Extras", "Store", "Original title", "Photos", "Album link", "Saved"]];
   filtered().forEach((a) => {
     const p = info(a);
-    rows.push([p.english, p.team || "Unsorted", p.season || "", p.kit || "", p.extras.join(", "),
+    rows.push([p.english, p.category, p.sub, p.team || "", p.season || "", p.kit || "", p.extras.join(", "),
       storeName(a.store), a.title, a.count || "", a.link, fmtDate(a.firstSeen)]);
   });
   const content = "﻿" + rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\r\n");
@@ -383,6 +466,9 @@ document.addEventListener("click", (e) => {
   const b = e.target.closest("button, .item");
   if (!b) return;
   if (b.dataset.renameStore !== undefined) renameStore(b.dataset.renameStore);
+  else if (b.dataset.storeCat !== undefined) setStoreCategory(b.dataset.storeCat);
+  else if (b.dataset.catEdit) setItemCategory(b.dataset.catEdit);
+  else if (b.dataset.cat !== undefined) { S.cat = b.dataset.cat; S.team = ""; S.shown = PAGE_SIZE; update(); $("main").scrollTop = 0; }
   else if (b.dataset.ddToggle) toggleDD(b.dataset.ddToggle);
   else if (b.dataset.pick !== undefined) pick(b.closest("[data-dd]").dataset.dd, b.dataset.pick);
   else if (b.dataset.team !== undefined) { S.team = b.dataset.team; S.shown = PAGE_SIZE; update(); $("main").scrollTop = 0; }

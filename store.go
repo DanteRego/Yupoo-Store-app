@@ -16,15 +16,17 @@ import (
 
 // Album is one saved kit.
 type Album struct {
-	Key       string `json:"key"`
-	Host      string `json:"host"`
-	Store     string `json:"store"`
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	Cover     string `json:"cover"`
-	Count     int    `json:"count,omitempty"`
-	Link      string `json:"link"`
-	Team      string `json:"team,omitempty"`
+	Key   string `json:"key"`
+	Host  string `json:"host"`
+	Store string `json:"store"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Cover string `json:"cover"`
+	Count int    `json:"count,omitempty"`
+	Link  string `json:"link"`
+	Team  string `json:"team,omitempty"`
+	// Category is your own choice (🏷 on the card), like "Shoes › Sneakers". Empty = the sorter decides.
+	Category  string `json:"category,omitempty"`
 	FirstSeen int64  `json:"firstSeen"`
 	LastSeen  int64  `json:"lastSeen"`
 }
@@ -50,6 +52,8 @@ type libraryFile struct {
 	Settings Settings          `json:"settings"`
 	// StoreNames holds your own names for stores (original store name -> your name).
 	StoreNames map[string]string `json:"storeNames,omitempty"`
+	// StoreCategories: what a store sells, used when an item's title doesn't say (store -> "Shoes › Sneakers").
+	StoreCategories map[string]string `json:"storeCategories,omitempty"`
 }
 
 type thumbJob struct{ key, host, cover string }
@@ -88,6 +92,9 @@ func OpenLibrary(dir, thumbDir string) (*Library, error) {
 	}
 	if l.data.StoreNames == nil {
 		l.data.StoreNames = map[string]string{}
+	}
+	if l.data.StoreCategories == nil {
+		l.data.StoreCategories = map[string]string{}
 	}
 	l.ensureMyTeamsFile()
 	go l.thumbWorker()
@@ -245,6 +252,45 @@ func (l *Library) SetStoreName(store, name string) {
 	l.scheduleSave()
 }
 
+// SetCategory gives one item your own category, like "Shoes › Sneakers". Empty = let the sorter decide.
+func (l *Library) SetCategory(key, category string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if a := l.data.Albums[key]; a != nil {
+		a.Category = strings.TrimSpace(category)
+		l.scheduleSave()
+	}
+}
+
+// SetCategories gives many items the same category at once (bulk edit). Empty = let the sorter decide.
+func (l *Library) SetCategories(keys []string, category string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	category = strings.TrimSpace(category)
+	n := 0
+	for _, k := range keys {
+		if a := l.data.Albums[k]; a != nil {
+			a.Category = category
+			n++
+		}
+	}
+	l.scheduleSave()
+	return n
+}
+
+// SetStoreCategory sets what a store's items are when their titles don't say. Empty = no default.
+func (l *Library) SetStoreCategory(store, category string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	category = strings.TrimSpace(category)
+	if category == "" {
+		delete(l.data.StoreCategories, store)
+	} else {
+		l.data.StoreCategories[store] = category
+	}
+	l.scheduleSave()
+}
+
 func (l *Library) SetSettings(s Settings) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -262,12 +308,13 @@ func (l *Library) StateJSON() ([]byte, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return json.Marshal(map[string]interface{}{
-		"library":    map[string]interface{}{"albums": l.data.Albums},
-		"aliases":    l.data.Aliases,
-		"myTeams":    l.myTeams(),
-		"settings":   l.data.Settings,
-		"storeNames": l.data.StoreNames,
-		"version":    l.version,
+		"library":         map[string]interface{}{"albums": l.data.Albums},
+		"aliases":         l.data.Aliases,
+		"myTeams":         l.myTeams(),
+		"settings":        l.data.Settings,
+		"storeNames":      l.data.StoreNames,
+		"storeCategories": l.data.StoreCategories,
+		"version":         l.version,
 	})
 }
 
@@ -349,6 +396,11 @@ func (l *Library) Restore(zipBytes []byte) (int, error) {
 	for k, v := range incoming.StoreNames {
 		if _, mine := l.data.StoreNames[k]; !mine {
 			l.data.StoreNames[k] = v
+		}
+	}
+	for k, v := range incoming.StoreCategories {
+		if _, mine := l.data.StoreCategories[k]; !mine {
+			l.data.StoreCategories[k] = v
 		}
 	}
 	l.scheduleSave()
