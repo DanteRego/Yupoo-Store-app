@@ -27,6 +27,9 @@ USING IT
     Categories - what each item is (Shirts › Football Kit, Shoes › Sneakers…)
                🏷 on a card changes one item; 🏷 next to a store sets what
                that store sells (used when a title doesn't say)
+    ☑ Select - bulk edit: click items to tick them (Shift+click ticks a run,
+               or "Select all matching"), then "Move to…" a category.
+               Undo appears for 15 seconds afterwards.
     Teams    - for clothing only; search in English or Chinese ("liv" or "利物浦")
     Stores   - narrow to one supplier; "open" jumps back into that store,
                ✎ gives the store your own name

@@ -36,13 +36,16 @@ async function call(method, path, body, raw) {
   return data;
 }
 
-let toastTimer = null;
-function toast(msg) {
+let toastTimer = null, toastAction = null;
+// A message at the bottom. With actionLabel, it also gets a button (e.g. Undo) and stays a bit longer.
+function toast(msg, actionLabel, action) {
   const t = $(".toast");
-  t.textContent = msg;
+  t.innerHTML = esc(msg) + (actionLabel ? ` <button class="toast-act">${esc(actionLabel)}</button>` : "");
+  toastAction = action || null;
+  t.classList.toggle("act", !!actionLabel);
   t.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("show"), 4500);
+  toastTimer = setTimeout(() => { t.classList.remove("show", "act"); toastAction = null; }, actionLabel ? 15000 : 4500);
 }
 
 // ---------- data ----------
@@ -280,6 +283,9 @@ function filtered() {
 
 function renderGrid() {
   const list = filtered(), total = all().length;
+  shownKeys = list.slice(0, S.shown).map((a) => a.key);
+  matchingKeys = list.map((a) => a.key);
+  renderSelBar();
   $(".count").textContent = total ? `${total} items · ${new Set(all().map((a) => a.store)).size} stores` : "";
   if (!total) {
     $(".summary").textContent = "";
@@ -300,9 +306,10 @@ function renderGrid() {
     $(".more").hidden = true;
     return;
   }
-  $(".grid").innerHTML = list.slice(0, S.shown).map((a) => {
+  $(".grid").innerHTML = list.slice(0, S.shown).map((a, i) => {
     const p = info(a);
-    return `<div class="card">
+    return `<div class="card ${sel.has(a.key) ? "picked" : ""}" data-card="${esc(a.key)}" data-i="${i}">
+      <span class="tick" aria-hidden="true">✓</span>
       <a class="img" href="${esc(a.link)}">
         <img data-key="${esc(a.key)}" data-cover="${esc(a.cover || "")}" alt="" loading="lazy">
         ${a.count ? `<span class="n">${a.count} photos</span>` : ""}
@@ -323,6 +330,102 @@ function renderGrid() {
   }).join("");
   $(".more").hidden = list.length <= S.shown;
   document.querySelectorAll("img[data-key]").forEach(loadThumb);
+}
+
+// ---------- bulk edit ----------
+// "☑ Select" turns on select mode: click cards to tick them (Shift+click ticks a whole run),
+// then use the bar at the bottom to move them all to a category at once.
+let selecting = false, lastPicked = -1, mvOpen = false, shownKeys = [], matchingKeys = [];
+const sel = new Set();
+
+function setSelecting(on) {
+  selecting = on;
+  if (!on) { sel.clear(); mvOpen = false; }
+  lastPicked = -1;
+  document.body.classList.toggle("selecting", on);
+  $(".selbtn").classList.toggle("on", on);
+  $(".selbtn").textContent = on ? "☑ Selecting…" : "☑ Select";
+  renderGrid();
+}
+
+function togglePick(card, shift) {
+  const i = +card.dataset.i, key = card.dataset.card;
+  if (shift && lastPicked !== -1) {
+    // Shift+click: tick (or untick) everything between the last card you clicked and this one.
+    const on = !sel.has(key);
+    const [from, to] = i < lastPicked ? [i, lastPicked] : [lastPicked, i];
+    shownKeys.slice(from, to + 1).forEach((k) => (on ? sel.add(k) : sel.delete(k)));
+  } else if (sel.has(key)) sel.delete(key);
+  else sel.add(key);
+  lastPicked = i;
+  document.querySelectorAll(".card[data-card]").forEach((c) => c.classList.toggle("picked", sel.has(c.dataset.card)));
+  renderSelBar();
+}
+
+function renderSelBar() {
+  const bar = $(".selbar");
+  bar.hidden = !selecting;
+  if (!selecting) return;
+  const n = sel.size;
+  $(".selcount").textContent = n ? `${n} selected` : "Click items to select them";
+  $('[data-sel="page"]').textContent = `Select shown (${shownKeys.length})`;
+  $('[data-sel="all"]').textContent = `Select all matching (${matchingKeys.length})`;
+  $('[data-sel="all"]').hidden = matchingKeys.length <= shownKeys.length;
+  bar.querySelectorAll(".needs").forEach((b) => { b.disabled = !n; });
+  $(".mv .dd-panel").hidden = !mvOpen || !n;
+  if (mvOpen && n) renderMoveOptions();
+}
+
+// The "Move to…" list: every category (plus ones you've made up), searchable; typing a new name offers to create it.
+function renderMoveOptions() {
+  const q = $(".mv input").value.trim();
+  const ql = q.toLowerCase();
+  const paths = YO_categoryPaths();
+  all().forEach((a) => { const p = info(a).catPath; if (paths.indexOf(p) === -1) paths.push(p); });
+  paths.sort((a, b) => catRank(a) - catRank(b) || a.localeCompare(b));
+  const hits = paths.filter((p) => !ql || p.toLowerCase().includes(ql));
+  let html = hits.map((p) => {
+    const sub = p.indexOf(" › ") !== -1;
+    return `<div class="item ${sub ? "sub" : "top"}" role="button" tabindex="0" data-move="${esc(p)}"><span class="name">${esc(sub ? p.split(" › ")[1] : p)}</span>` +
+      (sub && ql ? `<span class="c">${esc(p.split(" › ")[0])}</span>` : "") + `</div>`;
+  }).join("");
+  const typed = q.replace(/\s*[>›]\s*/g, " › ");
+  if (q && !paths.some((p) => p.toLowerCase() === typed.toLowerCase())) {
+    html += `<div class="item new" role="button" tabindex="0" data-move="${esc(typed)}"><span class="name">➕ New category “${esc(typed)}”</span></div>`;
+  }
+  $(".mv .dd-list").innerHTML = html;
+}
+
+async function moveSelected(category) {
+  const keys = [...sel];
+  if (!keys.length) return;
+  // Remember each item's old choice so Undo can put it back.
+  const before = new Map();
+  keys.forEach((k) => {
+    const old = (S.lib.albums[k] && S.lib.albums[k].category) || "";
+    if (!before.has(old)) before.set(old, []);
+    before.get(old).push(k);
+  });
+  try {
+    await call("POST", "/api/categories", { keys, category });
+  } catch (e) { toast("Couldn't move them: " + e.message); return; }
+  sel.clear(); mvOpen = false;
+  await refresh();
+  const where = category ? `to ${category}` : "back to the item sorter";
+  toast(`Moved ${keys.length} item${keys.length === 1 ? "" : "s"} ${where}.`, "Undo", async () => {
+    for (const [old, ks] of before) await call("POST", "/api/categories", { keys: ks, category: old });
+    await refresh();
+    toast("Undone.");
+  });
+}
+
+async function removeSelected() {
+  const keys = [...sel];
+  if (!keys.length || !confirm(`Remove ${keys.length} item${keys.length === 1 ? "" : "s"} from your library?\n\nThis can't be undone.`)) return;
+  await call("POST", "/api/remove", { keys });
+  sel.clear();
+  await refresh();
+  toast(`Removed ${keys.length} items.`);
 }
 
 // Photos come from the app's saved copies. If one isn't ready yet, keep retrying for a while
@@ -460,6 +563,30 @@ function openLink(text) {
 
 // ---------- events ----------
 document.addEventListener("click", (e) => {
+  if (e.target.closest(".toast-act")) { const f = toastAction; $(".toast").classList.remove("show", "act"); toastAction = null; if (f) f(); return; }
+  // Select mode: clicking a card ticks it instead of opening it.
+  const card = selecting && e.target.closest(".card[data-card]");
+  if (card) { e.preventDefault(); togglePick(card, e.shiftKey); return; }
+  if (mvOpen && !e.target.closest(".mv")) { mvOpen = false; renderSelBar(); }
+  const sb = e.target.closest("[data-sel], [data-move], .mv-btn, .selbtn");
+  if (sb) {
+    const act = sb.dataset.sel;
+    if (sb.classList.contains("selbtn")) setSelecting(!selecting);
+    else if (sb.classList.contains("mv-btn")) {
+      mvOpen = !mvOpen;
+      $(".mv input").value = "";
+      renderSelBar();
+      if (mvOpen) $(".mv input").focus();
+    }
+    else if (sb.dataset.move !== undefined) moveSelected(sb.dataset.move);
+    else if (act === "page") { shownKeys.forEach((k) => sel.add(k)); renderGrid(); }
+    else if (act === "all") { matchingKeys.forEach((k) => sel.add(k)); renderGrid(); }
+    else if (act === "none") { sel.clear(); renderGrid(); }
+    else if (act === "auto") moveSelected("");
+    else if (act === "remove") removeSelected();
+    else if (act === "done") setSelecting(false);
+    return;
+  }
   if (e.target.closest("a.open")) return; // let "open ↗" links navigate
   // Clicking anywhere outside an open dropdown closes it.
   if (openDD && !e.target.closest(".dd")) { openDD = ""; renderFilters(); }
@@ -486,6 +613,15 @@ document.addEventListener("click", (e) => {
 $("form.go").addEventListener("submit", (e) => { e.preventDefault(); openLink($(".link").value); });
 $(".teamq").addEventListener("input", (e) => { S.teamQ = e.target.value; renderTeams(); });
 $(".q").addEventListener("input", (e) => { S.q = e.target.value; S.shown = PAGE_SIZE; renderFilters(); renderGrid(); });
+// "Move to…" search box: typing narrows the list, Enter picks the top match, Esc closes it.
+$(".mv input").addEventListener("input", renderMoveOptions);
+$(".mv input").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { mvOpen = false; renderSelBar(); }
+  else if (e.key === "Enter") { const first = $(".mv .dd-list .item"); if (first) moveSelected(first.dataset.move); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && selecting && !mvOpen && !e.target.closest("input")) setSelecting(false);
+});
 // Typing in a dropdown's search box narrows its list. Enter picks the top match, Esc closes it.
 $(".dds").addEventListener("input", (e) => { if (openDD) renderOptions(openDD); });
 $(".dds").addEventListener("keydown", (e) => {
