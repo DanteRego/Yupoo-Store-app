@@ -1,0 +1,169 @@
+package main
+
+import (
+	"bytes"
+	"errors"
+	"image"
+	"image/jpeg"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	_ "image/gif"
+	_ "image/png"
+)
+
+const thumbMax = 360
+
+// thumbWorker downloads each kit's cover once and keeps a small copy on disk.
+func (l *Library) thumbWorker() {
+	client := &http.Client{Timeout: 25 * time.Second}
+	for job := range l.thumbs {
+		p := l.thumbPath(job.key)
+		if _, err := os.Stat(p); err == nil {
+			continue
+		}
+		data, err := fetchImage(client, job.cover, "https://"+job.host+"/")
+		if err != nil {
+			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+		writeThumb(p, makeThumb(data))
+		time.Sleep(80 * time.Millisecond) // be gentle with Yupoo
+	}
+}
+
+func writeThumb(p string, out []byte) {
+	f, err := os.CreateTemp(filepath.Dir(p), "dl-*.tmp")
+	if err != nil {
+		return
+	}
+	_, err = f.Write(out)
+	f.Close()
+	if err != nil || os.Rename(f.Name(), p) != nil {
+		_ = os.Remove(f.Name())
+	}
+}
+
+var (
+	onDemandClient = &http.Client{Timeout: 25 * time.Second}
+	onDemandSlots  = make(chan struct{}, 4)
+)
+
+// EnsureThumb returns a kit's saved photo. If the background downloader hasn't
+// reached it yet, the photo is fetched right away so the library never waits.
+func (l *Library) EnsureThumb(name string) ([]byte, error) {
+	name = unsafeChars.ReplaceAllString(name, "_")
+	p := filepath.Join(l.dir, "thumbs", name)
+	if b, err := os.ReadFile(p); err == nil {
+		return b, nil
+	}
+	var job *thumbJob
+	l.mu.Lock()
+	for _, a := range l.data.Albums {
+		if a.Cover != "" && unsafeChars.ReplaceAllString(a.Key, "_") == name {
+			job = &thumbJob{a.Key, a.Host, a.Cover}
+			break
+		}
+	}
+	l.mu.Unlock()
+	if job == nil {
+		return nil, os.ErrNotExist
+	}
+	onDemandSlots <- struct{}{}
+	defer func() { <-onDemandSlots }()
+	if b, err := os.ReadFile(p); err == nil { // the downloader may have just finished it
+		return b, nil
+	}
+	data, err := fetchImage(onDemandClient, job.cover, "https://"+job.host+"/")
+	if err != nil {
+		return nil, err
+	}
+	out := makeThumb(data)
+	writeThumb(p, out)
+	return out, nil
+}
+
+func fetchImage(client *http.Client, url, referer string) ([]byte, error) {
+	if r := os.Getenv("KIT_TEST_REWRITE"); r != "" { // used only by the test suite
+		if parts := strings.SplitN(r, "=>", 2); len(parts) == 2 {
+			url = strings.Replace(url, parts[0], parts[1], 1)
+		}
+	}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	// Yupoo only serves photos to its own pages, so say where we came from.
+	req.Header.Set("Referer", referer)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36 Edg/128.0")
+	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return nil, errors.New(res.Status)
+	}
+	b, err := io.ReadAll(io.LimitReader(res.Body, 15<<20))
+	if err != nil || len(b) == 0 {
+		return nil, errors.New("empty image")
+	}
+	if ct := http.DetectContentType(b); len(ct) < 6 || ct[:6] != "image/" {
+		return nil, errors.New("not an image: " + ct)
+	}
+	return b, nil
+}
+
+// makeThumb shrinks JPEG/PNG/GIF covers; other formats (e.g. WebP) are kept as they are.
+func makeThumb(data []byte) []byte {
+	src, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return data
+	}
+	b := src.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w <= 0 || h <= 0 {
+		return data
+	}
+	scale := float64(thumbMax) / float64(max(w, h))
+	if scale >= 1 {
+		scale = 1
+	}
+	nw, nh := max(1, int(float64(w)*scale)), max(1, int(float64(h)*scale))
+	dst := image.NewRGBA(image.Rect(0, 0, nw, nh))
+	// Box filter: average every source pixel that falls inside each target pixel.
+	for y := 0; y < nh; y++ {
+		y0 := b.Min.Y + y*h/nh
+		y1 := max(y0+1, b.Min.Y+(y+1)*h/nh)
+		for x := 0; x < nw; x++ {
+			x0 := b.Min.X + x*w/nw
+			x1 := max(x0+1, b.Min.X+(x+1)*w/nw)
+			var r, g, bl, a, n uint64
+			for sy := y0; sy < y1; sy++ {
+				for sx := x0; sx < x1; sx++ {
+					cr, cg, cb, ca := src.At(sx, sy).RGBA()
+					r += uint64(cr)
+					g += uint64(cg)
+					bl += uint64(cb)
+					a += uint64(ca)
+					n++
+				}
+			}
+			i := dst.PixOffset(x, y)
+			dst.Pix[i] = uint8(r / n >> 8)
+			dst.Pix[i+1] = uint8(g / n >> 8)
+			dst.Pix[i+2] = uint8(bl / n >> 8)
+			dst.Pix[i+3] = uint8(a / n >> 8)
+		}
+	}
+	var out bytes.Buffer
+	if err := jpeg.Encode(&out, dst, &jpeg.Options{Quality: 80}); err != nil {
+		return data
+	}
+	return out.Bytes()
+}

@@ -1,0 +1,27 @@
+HOW TO CHANGE KIT LIBRARY
+=========================
+
+ONE-TIME SETUP
+1. Install Go (free): https://go.dev/dl/ -> download the Windows installer -> Next, Next, Finish.
+2. In GitHub Desktop: File -> Add local repository -> choose this folder.
+   It will say this isn't a repository yet -> click "create a repository" -> Create.
+   (Optional: "Publish repository" with "Keep this code private" ticked, for an online backup.)
+3. In the Claude desktop app, open Claude Code and choose this folder.
+
+EVERY TIME YOU WANT A CHANGE
+1. In Claude Code, describe it in plain words, e.g.
+     "Add a filter for long sleeve kits"
+     "Make the photo cards bigger"
+     "The supplier writes 红军 for Liverpool"
+2. Double-click build.bat. It closes Kit Library, builds the new version and opens it.
+3. Try it. Happy?
+     Yes -> in GitHub Desktop, type a short summary (bottom left) and click "Commit to main".
+     No  -> tell Claude Code what's wrong, or in GitHub Desktop right-click the changed
+            files and choose "Discard changes" to go back to the last version you saved.
+
+JUST ADDING A SUPPLIER'S NICKNAME FOR A TEAM? No building needed:
+  Open %APPDATA%\KitLibrary\my-teams.txt (paste that into the File Explorer address bar),
+  add a line like   红军 = Liverpool   then save and reopen the Library page.
+
+Your saved kits live in %APPDATA%\KitLibrary, separate from this folder,
+so rebuilding or undoing code changes never deletes them.
