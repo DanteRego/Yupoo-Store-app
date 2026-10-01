@@ -34,6 +34,7 @@ func main() {
 			Width:  1380,
 			Height: 900,
 			Center: true,
+			IconId: 1, // the app icon from rsrc_windows_amd64.syso (made by tools/makeicon)
 		},
 	})
 	if w == nil {

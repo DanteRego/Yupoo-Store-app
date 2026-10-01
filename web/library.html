@@ -28,7 +28,6 @@
   aside h3 { margin: 16px 16px 8px; font-size: 12px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
   input, select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
   input:focus, select:focus { outline: 2px solid var(--green); outline-offset: -1px; }
-  .teamq { width: calc(100% - 28px); margin: 0 14px 6px; }
   .list { padding: 0 8px; }
   .item { cursor: pointer; display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; background: transparent; padding: 7px 8px; border-radius: 6px; }
   .item:hover { background: var(--soft); }
@@ -37,7 +36,14 @@
   .item.on .c { color: #d6eadf; }
   .item.warn { color: var(--warn); }
   .item.top { font-weight: 600; margin-top: 4px; }
-  .item.sub { padding-left: 22px; font-size: 13px; }
+  .item.sub { padding-left: 34px; font-size: 13px; }
+  .item.top { align-items: center; gap: 4px; }
+  .chev { flex-shrink: 0; width: 22px; height: 22px; padding: 0; margin: -2px 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 11px; line-height: 22px; text-align: center; transition: transform .15s; }
+  .chev:hover { background: var(--line); color: var(--ink); }
+  .chev.open { transform: rotate(90deg); }
+  .item.on .chev { color: #fff; }
+  .item.on .chev:hover { background: rgba(255,255,255,.2); }
+  .chev-gap { flex-shrink: 0; width: 22px; }
   .catline { font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--green); }
   @media (prefers-color-scheme: dark) { .catline { color: #6fd0a0; } }
   .catline.unsorted { color: var(--warn); }
@@ -132,9 +138,6 @@
     <aside>
       <h3>Categories</h3>
       <div class="list cats"></div>
-      <h3>Teams</h3>
-      <input class="teamq" type="search" placeholder="Search teams (EN / 中文)">
-      <div class="list teams"></div>
       <h3>Stores</h3>
       <div class="list stores"></div>
     </aside>

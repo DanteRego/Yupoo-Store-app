@@ -24,6 +24,7 @@ The owner is new to programming: explain changes in plain words and keep steps s
 - `server.go` — local web server + API the Library page calls (token-protected); data folder locations
   (moves the old `KitLibrary` / `M:\Kit Library` folders to the new names on first start).
 - `main_windows.go` — the app window; `main_other.go` — Mac/Linux test mode (library only).
+- App icon: `Icon Yupoo.ico`. `build.bat` turns it into `rsrc_windows_amd64.syso` with `tools/makeicon` (no downloads), which Go builds into the .exe; the window uses it via `IconId: 1`. Don't set the icon by editing the .exe — the next build replaces it.
 - Internal names like `kitSave`, `X-Kit-Token` and `KIT_DATA_DIR` are leftovers from the old name; the owner never sees them.
 
 ## Rules

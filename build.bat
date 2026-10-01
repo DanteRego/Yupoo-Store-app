@@ -11,6 +11,7 @@ echo Closing Yupoo Library if it's open...
 taskkill /im YupooLibrary.exe >nul 2>nul
 taskkill /im KitLibrary.exe >nul 2>nul
 timeout /t 2 /nobreak >nul
+if exist "Icon Yupoo.ico" go run tools/makeicon/main.go "Icon Yupoo.ico"
 echo Building YupooLibrary.exe...
 go build -trimpath -ldflags "-H windowsgui -s -w" -o YupooLibrary.exe .
 if errorlevel 1 (

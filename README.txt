@@ -24,7 +24,8 @@ USING IT
                         (about 2 seconds per page so Yupoo doesn't block you)
     Library           - back to your library
 - In the library:
-    Categories - what each item is (Shirts › Football Kit, Shoes › Sneakers…)
+    Categories - what each item is (Shirts › Football Kit, Shoes › Sneakers…);
+               ▸ opens or folds a category's subcategories
                🏷 on a card changes one item; 🏷 next to a store sets what
                that store sells (used when a title doesn't say)
     ☑ Select - bulk edit: click items to tick them (Shift+click ticks a run,

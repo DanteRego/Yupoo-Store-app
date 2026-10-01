@@ -4,7 +4,7 @@ const PAGE_SIZE = 120;
 
 const S = {
   lib: { albums: {} }, aliases: {}, myTeams: {}, settings: { autoSave: true }, storeNames: {}, storeCats: {},
-  cat: "", team: "", store: "", kit: "", season: "", extra: "", q: "", teamQ: "", sort: "team", shown: PAGE_SIZE
+  cat: "", team: "", store: "", kit: "", season: "", extra: "", q: "", sort: "team", shown: PAGE_SIZE
 };
 // The dropdown filters above the items. "f" is the name of the filter in S.
 const FILTERS = [
@@ -119,38 +119,35 @@ function renderCats() {
   const paths = YO_categoryPaths();
   // Categories you typed yourself that aren't in categories.js still get listed.
   [...counts.keys()].forEach((k) => { if (paths.indexOf(k) === -1) paths.push(k); });
-  let html = item("cat", "", "All items", inStore.length, S.cat === "");
+  // A main category with subcategories folds open/closed with its ▸ arrow.
+  const hasSubs = new Set(paths.filter((p) => p.indexOf(" › ") !== -1 && counts.get(p)).map((p) => p.split(" › ")[0]));
+  let html = item("cat", "", "All items", inStore.length, S.cat === "", "top").replace('<span class="name"', '<span class="chev-gap"></span><span class="name"');
   paths.sort((a, b) => catRank(a) - catRank(b)).forEach((path) => {
     if (!counts.get(path)) return;
     const sub = path.indexOf(" › ") !== -1;
-    html += item("cat", path, sub ? path.split(" › ")[1] : path, counts.get(path), S.cat === path, sub ? "sub" : "top");
+    const top = sub ? path.split(" › ")[0] : path;
+    const open = openCats.has(top);
+    if (sub) { if (open) html += item("cat", path, path.split(" › ")[1], counts.get(path), S.cat === path, "sub"); return; }
+    const chev = hasSubs.has(top)
+      ? `<button class="chev ${open ? "open" : ""}" data-chev="${esc(top)}" title="${open ? "Hide" : "Show"} subcategories">▸</button>`
+      : `<span class="chev-gap"></span>`;
+    html += item("cat", path, path, counts.get(path), S.cat === path, "top").replace('<span class="name"', chev + '<span class="name"');
   });
   $(".cats").innerHTML = html;
 }
-const catRank = (path) => { const [c, s] = path.split(" › "); return YO_categoryRank(c, s || ""); };
 
-// Teams only apply to clothing; this list counts the clothing in the chosen store and category.
-function renderTeams() {
-  const scope = all().filter((a) => (!S.store || a.store === S.store) && (!S.cat || vals(a, "cat").includes(S.cat)));
-  const counts = new Map(); let unsorted = 0, clothing = 0;
-  scope.forEach((a) => {
-    const p = info(a);
-    if (!p.clothing) return;
-    clothing++;
-    if (p.team) counts.set(p.team, (counts.get(p.team) || 0) + 1);
-    else if (p.footballKit) unsorted++;
-  });
-  const q = S.teamQ.toLowerCase().trim();
-  let html = "";
-  if (!q) {
-    html += item("team", "", "All teams", clothing, S.team === "");
-    if (unsorted) html += item("team", "__unsorted", "⚠ Kits with no team", unsorted, S.team === "__unsorted", "warn");
+// Which main categories you've opened. Remembered on this computer between visits.
+const openCats = new Set((() => { try { return JSON.parse(localStorage.getItem("openCats") || "[]"); } catch (e) { return []; } })());
+function setCatOpen(top, open) {
+  if (open) openCats.add(top);
+  else {
+    openCats.delete(top);
+    // Folding away the subcategory you're looking at widens the filter to the whole category.
+    if (S.cat.indexOf(top + " › ") === 0) S.cat = top;
   }
-  [...counts.keys()].sort((a, b) => a.localeCompare(b)).filter((t) => teamMatches(t, q))
-    .forEach((t) => { html += item("team", t, t, counts.get(t), S.team === t); });
-  if (q && !html) html = `<div class="summary" style="padding:4px 10px">No team matches “${esc(S.teamQ)}”.</div>`;
-  $(".teams").innerHTML = html;
+  try { localStorage.setItem("openCats", JSON.stringify([...openCats])); } catch (e) {}
 }
+const catRank = (path) => { const [c, s] = path.split(" › "); return YO_categoryRank(c, s || ""); };
 
 function renderStores() {
   const counts = new Map(), hosts = new Map();
@@ -243,6 +240,7 @@ function toggleDD(f) {
 
 function pick(f, v) {
   S[f] = v; openDD = ""; S.shown = PAGE_SIZE;
+  if (f === "cat" && v) setCatOpen(v.split(" › ")[0], true);
   update();
   $("main").scrollTop = 0;
 }
@@ -441,7 +439,7 @@ function loadThumb(img, attempt) {
   img.src = "/thumb/" + encodeURIComponent(img.dataset.key.replace(/[^A-Za-z0-9._-]/g, "_")) + (attempt ? "?r=" + attempt : "");
 }
 
-function update() { renderCats(); renderTeams(); renderStores(); renderFilters(); renderGrid(); }
+function update() { renderCats(); renderStores(); renderFilters(); renderGrid(); }
 function renderAll() {
   update();
   $(".autosave").checked = S.settings.autoSave;
@@ -595,11 +593,15 @@ document.addEventListener("click", (e) => {
   if (b.dataset.renameStore !== undefined) renameStore(b.dataset.renameStore);
   else if (b.dataset.storeCat !== undefined) setStoreCategory(b.dataset.storeCat);
   else if (b.dataset.catEdit) setItemCategory(b.dataset.catEdit);
-  else if (b.dataset.cat !== undefined) { S.cat = b.dataset.cat; S.team = ""; S.shown = PAGE_SIZE; update(); $("main").scrollTop = 0; }
+  else if (b.dataset.chev !== undefined) { setCatOpen(b.dataset.chev, !openCats.has(b.dataset.chev)); update(); }
+  else if (b.dataset.cat !== undefined) {
+    S.cat = b.dataset.cat; S.shown = PAGE_SIZE;
+    if (S.cat) setCatOpen(S.cat.split(" › ")[0], true);
+    update(); $("main").scrollTop = 0;
+  }
   else if (b.dataset.ddToggle) toggleDD(b.dataset.ddToggle);
   else if (b.dataset.pick !== undefined) pick(b.closest("[data-dd]").dataset.dd, b.dataset.pick);
-  else if (b.dataset.team !== undefined) { S.team = b.dataset.team; S.shown = PAGE_SIZE; update(); $("main").scrollTop = 0; }
-  else if (b.dataset.store !== undefined) { S.store = b.dataset.store; S.team = ""; S.shown = PAGE_SIZE; update(); $("main").scrollTop = 0; }
+  else if (b.dataset.store !== undefined) { S.store = b.dataset.store; S.shown = PAGE_SIZE; update(); $("main").scrollTop = 0; }
   else if (b.classList.contains("clear")) {
     FILTERS.forEach(({ f }) => { S[f] = ""; });
     S.q = ""; $(".q").value = ""; S.shown = PAGE_SIZE; update();
@@ -611,7 +613,6 @@ document.addEventListener("click", (e) => {
   else if (b.classList.contains("more")) { S.shown += PAGE_SIZE; renderGrid(); }
 });
 $("form.go").addEventListener("submit", (e) => { e.preventDefault(); openLink($(".link").value); });
-$(".teamq").addEventListener("input", (e) => { S.teamQ = e.target.value; renderTeams(); });
 $(".q").addEventListener("input", (e) => { S.q = e.target.value; S.shown = PAGE_SIZE; renderFilters(); renderGrid(); });
 // "Move to…" search box: typing narrows the list, Enter picks the top match, Esc closes it.
 $(".mv input").addEventListener("input", renderMoveOptions);
