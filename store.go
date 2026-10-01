@@ -307,7 +307,7 @@ func (l *Library) WriteBackup(w io.Writer) error {
 func (l *Library) Restore(zipBytes []byte) (int, error) {
 	zr, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
 	if err != nil {
-		return 0, fmt.Errorf("not a Kit Library backup")
+		return 0, fmt.Errorf("not a Yupoo Library backup")
 	}
 	var incoming libraryFile
 	found := false
@@ -332,7 +332,7 @@ func (l *Library) Restore(zipBytes []byte) (int, error) {
 		}
 	}
 	if !found {
-		return 0, fmt.Errorf("not a Kit Library backup")
+		return 0, fmt.Errorf("not a Yupoo Library backup")
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -357,7 +357,7 @@ func (l *Library) Restore(zipBytes []byte) (int, error) {
 
 // ---------- my-teams.txt: supplier nicknames you can add yourself ----------
 
-const myTeamsTemplate = `# Kit Library - your own team names
+const myTeamsTemplate = `# Yupoo Library - your own team names
 #
 # Add one line per name a supplier uses, like this:
 #     nickname = English team name

@@ -1,4 +1,4 @@
-// Kit Library app — runs on every Yupoo store page opened inside the app and saves the kits it sees.
+// Yupoo Library app — runs on every Yupoo store page opened inside the app and saves the items it sees.
 (() => {
   if (!/\.x\.yupoo\.com$/i.test(location.hostname)) return;
   if (window.top !== window) return;
@@ -130,7 +130,7 @@
       crawling = true; stopCrawl = false;
       let page = 1, maxPage = null, prevSig = "", newCount = 0, seen = 0;
       while (true) {
-        if (stopCrawl) { crawlMsg = `Stopped — ${newCount} new kits saved.`; break; }
+        if (stopCrawl) { crawlMsg = `Stopped — ${newCount} new items saved.`; break; }
         crawlMsg = `Saving page ${page}${maxPage ? " of " + maxPage : ""}… ${newCount} new`;
         renderPill();
         let doc;
@@ -139,17 +139,17 @@
           if (!res.ok) throw new Error("HTTP " + res.status);
           doc = new DOMParser().parseFromString(await res.text(), "text/html");
         } catch (e) {
-          crawlMsg = `Yupoo stopped answering on page ${page}. Wait a minute, then try again — saved kits are kept.`;
+          crawlMsg = `Yupoo stopped answering on page ${page}. Wait a minute, then try again — saved items are kept.`;
           break;
         }
         if (page === 1) maxPage = detectMaxPage(doc);
         const found = extractAlbums(doc);
         const sig = found.map((a) => a.id).join(",");
-        if (!found.length || sig === prevSig) { crawlMsg = `Done — ${seen} kits in this store, ${newCount} new.`; break; }
+        if (!found.length || sig === prevSig) { crawlMsg = `Done — ${seen} items in this store, ${newCount} new.`; break; }
         const res = await save(found, true);
         newCount += res.added || 0;
         seen += found.length;
-        if (maxPage && page >= maxPage) { crawlMsg = `Done — ${seen} kits in this store, ${newCount} new.`; break; }
+        if (maxPage && page >= maxPage) { crawlMsg = `Done — ${seen} items in this store, ${newCount} new.`; break; }
         if (page >= 500) break;
         prevSig = sig;
         page++;
@@ -186,7 +186,7 @@
       let msg;
       if (crawling || crawlMsg) msg = crawlMsg;
       else if (!settings.autoSave) msg = "Auto-save is off";
-      else msg = savedThisPage ? `✓ ${savedThisPage} kit${savedThisPage === 1 ? "" : "s"} saved from this page` : "Kit Library";
+      else msg = savedThisPage ? `✓ ${savedThisPage} item${savedThisPage === 1 ? "" : "s"} saved from this page` : "Yupoo Library";
       $(".msg").textContent = msg;
       $('[data-act="store"]').textContent = crawling ? "Stop" : "Save whole store";
       $('[data-act="page"]').hidden = settings.autoSave;

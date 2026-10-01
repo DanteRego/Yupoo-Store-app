@@ -1,4 +1,4 @@
-// Kit Library app — the library page: every kit you've saved, from every store, in one place.
+// Yupoo Library app — the library page: every item you've saved, from every store, in one place.
 const TOKEN = document.querySelector('meta[name="kit-token"]').content;
 const PAGE_SIZE = 120;
 
@@ -6,7 +6,7 @@ const S = {
   lib: { albums: {} }, aliases: {}, myTeams: {}, settings: { autoSave: true }, storeNames: {},
   team: "", store: "", kit: "", season: "", extra: "", q: "", teamQ: "", sort: "team", shown: PAGE_SIZE
 };
-// The dropdown filters above the kits. "f" is the name of the filter in S.
+// The dropdown filters above the items. "f" is the name of the filter in S.
 const FILTERS = [
   { f: "team", label: "Team", any: "Any team" },
   { f: "season", label: "Season", any: "Any season" },
@@ -119,7 +119,7 @@ function renderStores() {
 }
 
 // ---------- dropdown filters ----------
-// What a kit counts as for each filter. "—" means the title doesn't say.
+// What an item counts as for each filter. "—" means the title doesn't say.
 function vals(a, f) {
   const p = info(a);
   if (f === "team") return [p.team || "__unsorted"];
@@ -167,7 +167,7 @@ function renderFilters() {
   $(".clear").hidden = !(S.q || FILTERS.some(({ f }) => S[f]));
 }
 
-// The choices in one dropdown, with how many kits each would show (given the other filters).
+// The choices in one dropdown, with how many items each would show (given the other filters).
 function renderOptions(f) {
   const panel = $(`[data-dd="${f}"] .dd-panel`);
   const q = panel.querySelector("input").value.toLowerCase().trim();
@@ -202,7 +202,7 @@ function pick(f, v) {
 }
 
 // ---------- grid ----------
-// Does this kit pass every filter (except "skip") and the search box?
+// Does this item pass every filter (except "skip") and the search box?
 function passes(a, skip) {
   for (const { f } of FILTERS) {
     if (f !== skip && S[f] && !vals(a, f).includes(S[f])) return false;
@@ -234,23 +234,23 @@ function filtered() {
 
 function renderGrid() {
   const list = filtered(), total = all().length;
-  $(".count").textContent = total ? `${total} kits · ${new Set(all().map((a) => a.store)).size} stores` : "";
+  $(".count").textContent = total ? `${total} items · ${new Set(all().map((a) => a.store)).size} stores` : "";
   if (!total) {
     $(".summary").textContent = "";
     $(".grid").innerHTML = `<div class="empty" style="grid-column:1/-1"><strong>Your library is empty</strong>
       <ol>
         <li>Paste a Yupoo link in the box at the top and press <b>Open</b>.</li>
-        <li>Browse as normal — every kit you see is saved here automatically.</li>
+        <li>Browse as normal — every item you see is saved here automatically.</li>
         <li>Press <b>Save whole store</b> in the green bar to grab a supplier's entire catalog.</li>
         <li>Press <b>Library</b> in the green bar to come back here.</li>
       </ol></div>`;
     $(".more").hidden = true;
     return;
   }
-  $(".summary").textContent = `Showing ${Math.min(list.length, S.shown)} of ${list.length} kits` +
+  $(".summary").textContent = `Showing ${Math.min(list.length, S.shown)} of ${list.length} items` +
     (list.length !== total ? ` (${total} saved in total)` : "");
   if (!list.length) {
-    $(".grid").innerHTML = `<div class="empty" style="grid-column:1/-1">No kits match these filters.</div>`;
+    $(".grid").innerHTML = `<div class="empty" style="grid-column:1/-1">No items match these filters.</div>`;
     $(".more").hidden = true;
     return;
   }
@@ -311,7 +311,7 @@ async function editTeam(key) {
   const canon = name ? (YO_canonicalTeam(name, allAliases()) || name) : "";
   const parsedTeam = YO_parse(a.title, matcher).team;
   const seg = YO_guessAlias(a.title);
-  if (canon && seg && !parsedTeam && confirm(`Also treat "${seg}" as ${canon} for every kit, in every store?`)) {
+  if (canon && seg && !parsedTeam && confirm(`Also treat "${seg}" as ${canon} for every item, in every store?`)) {
     S.aliases[seg] = canon;
     await call("POST", "/api/aliases", S.aliases);
   }
@@ -321,7 +321,7 @@ async function editTeam(key) {
 
 async function removeKit(key) {
   const a = S.lib.albums[key]; if (!a) return;
-  if (!confirm(`Remove this kit from your library?\n\n${info(a).english}`)) return;
+  if (!confirm(`Remove this item from your library?\n\n${info(a).english}`)) return;
   await call("POST", "/api/remove", { keys: [key] });
   await refresh();
 }
@@ -344,8 +344,8 @@ async function exportCsv() {
   });
   const content = "﻿" + rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\r\n");
   try {
-    const res = await call("POST", "/api/save-file", { name: `kit-library-${today()}.csv`, content });
-    toast(`Saved ${rows.length - 1} kits to ${res.path}`);
+    const res = await call("POST", "/api/save-file", { name: `yupoo-library-${today()}.csv`, content });
+    toast(`Saved ${rows.length - 1} items to ${res.path}`);
   } catch (e) { toast("Couldn't save the CSV: " + e.message); }
 }
 
@@ -360,9 +360,9 @@ async function backup() {
 async function restore(file) {
   try {
     const res = await call("POST", "/api/restore", await file.arrayBuffer(), true);
-    toast(`Restore finished — ${res.added} kits added.`);
+    toast(`Restore finished — ${res.added} items added.`);
     await refresh();
-  } catch (e) { toast("That file isn't a Kit Library backup (.zip)."); }
+  } catch (e) { toast("That file isn't a Yupoo Library backup (.zip)."); }
 }
 
 function openLink(text) {

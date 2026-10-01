@@ -20,7 +20,7 @@ func messageBox(title, text string) {
 func main() {
 	app, err := StartApp()
 	if err != nil {
-		messageBox("Kit Library", "Kit Library couldn't start:\n\n"+err.Error())
+		messageBox("Yupoo Library", "Yupoo Library couldn't start:\n\n"+err.Error())
 		return
 	}
 	defer app.lib.Flush()
@@ -30,16 +30,16 @@ func main() {
 		AutoFocus: true,
 		DataPath:  filepath.Join(app.lib.dir, "browser"),
 		WindowOptions: webview2.WindowOptions{
-			Title:  "Kit Library",
+			Title:  "Yupoo Library",
 			Width:  1380,
 			Height: 900,
 			Center: true,
 		},
 	})
 	if w == nil {
-		messageBox("Kit Library",
-			"Kit Library needs Microsoft Edge WebView2, which is built into Windows 10 and 11.\n\n"+
-				"If you see this, install the free \"WebView2 Runtime\" from Microsoft's website and open Kit Library again.")
+		messageBox("Yupoo Library",
+			"Yupoo Library needs Microsoft Edge WebView2, which is built into Windows 10 and 11.\n\n"+
+				"If you see this, install the free \"WebView2 Runtime\" from Microsoft's website and open Yupoo Library again.")
 		return
 	}
 	defer w.Destroy()

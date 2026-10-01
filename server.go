@@ -28,9 +28,27 @@ func dataDir() string {
 		return d
 	}
 	if d, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(d, "KitLibrary")
+		return renamedDir(filepath.Join(d, "KitLibrary"), filepath.Join(d, "YupooLibrary"))
 	}
-	return "KitLibraryData"
+	return "YupooLibraryData"
+}
+
+// renamedDir moves a folder from the app's old name (Kit Library) to its new name
+// (Yupoo Library) the first time. If it can't be moved, the old folder keeps being used.
+func renamedDir(oldDir, newDir string) string {
+	if _, err := os.Stat(newDir); err == nil {
+		return newDir
+	}
+	if _, err := os.Stat(oldDir); err != nil {
+		return newDir // nothing saved yet
+	}
+	if err := os.MkdirAll(filepath.Dir(newDir), 0o755); err != nil {
+		return oldDir
+	}
+	if err := os.Rename(oldDir, newDir); err != nil {
+		return oldDir
+	}
+	return newDir
 }
 
 // thumbsDir is where cover photos are kept. They go on the M: drive when it is
@@ -40,7 +58,10 @@ func thumbsDir() string {
 		return d
 	}
 	if st, err := os.Stat(`M:\`); err == nil && st.IsDir() {
-		return `M:\Kit Library\Thumbnails`
+		if renamedDir(`M:\Kit Library`, `M:\Yupoo Library`) == `M:\Kit Library` {
+			return `M:\Kit Library\Thumbnails`
+		}
+		return `M:\Yupoo Library\Thumbnails`
 	}
 	return filepath.Join(dataDir(), "thumbs")
 }
@@ -217,7 +238,7 @@ func (a *App) routes() http.Handler {
 		return map[string]string{"path": p}, nil
 	}))
 	mux.HandleFunc("POST /api/backup", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
-		p := uniquePath(downloadsDir(), "kit-library-backup-"+todayStamp()+".zip")
+		p := uniquePath(downloadsDir(), "yupoo-library-backup-"+todayStamp()+".zip")
 		f, err := os.Create(p)
 		if err != nil {
 			return nil, err

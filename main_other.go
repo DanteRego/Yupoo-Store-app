@@ -14,10 +14,10 @@ import (
 func main() {
 	app, err := StartApp()
 	if err != nil {
-		fmt.Println("Kit Library couldn't start:", err)
+		fmt.Println("Yupoo Library couldn't start:", err)
 		os.Exit(1)
 	}
-	fmt.Println("Kit Library is running at", app.baseURL)
+	fmt.Println("Yupoo Library is running at", app.baseURL)
 	fmt.Println("TOKEN", app.token)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

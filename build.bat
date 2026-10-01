@@ -7,11 +7,12 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-echo Closing Kit Library if it's open...
+echo Closing Yupoo Library if it's open...
+taskkill /im YupooLibrary.exe >nul 2>nul
 taskkill /im KitLibrary.exe >nul 2>nul
 timeout /t 2 /nobreak >nul
-echo Building KitLibrary.exe...
-go build -trimpath -ldflags "-H windowsgui -s -w" -o KitLibrary.exe .
+echo Building YupooLibrary.exe...
+go build -trimpath -ldflags "-H windowsgui -s -w" -o YupooLibrary.exe .
 if errorlevel 1 (
   echo.
   echo Build failed - the message above says what went wrong.
@@ -20,4 +21,4 @@ if errorlevel 1 (
   exit /b 1
 )
 echo Done! Starting the new version...
-start "" KitLibrary.exe
+start "" YupooLibrary.exe
