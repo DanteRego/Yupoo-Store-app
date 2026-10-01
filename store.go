@@ -55,17 +55,22 @@ type thumbJob struct{ key, host, cover string }
 type Library struct {
 	mu        sync.Mutex
 	dir       string
+	thumbDir  string
 	data      libraryFile
 	version   int64
 	saveTimer *time.Timer
 	thumbs    chan thumbJob
 }
 
-func OpenLibrary(dir string) (*Library, error) {
-	if err := os.MkdirAll(filepath.Join(dir, "thumbs"), 0o755); err != nil {
+func OpenLibrary(dir, thumbDir string) (*Library, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	l := &Library{dir: dir, thumbs: make(chan thumbJob, 20000)}
+	if err := os.MkdirAll(thumbDir, 0o755); err != nil {
+		return nil, err
+	}
+	l := &Library{dir: dir, thumbDir: thumbDir, thumbs: make(chan thumbJob, 20000)}
+	l.moveOldThumbs()
 	l.data = libraryFile{Albums: map[string]*Album{}, Aliases: map[string]string{}, Settings: Settings{AutoSave: true}}
 	if b, err := os.ReadFile(l.file()); err == nil {
 		if err := json.Unmarshal(b, &l.data); err != nil {
@@ -93,7 +98,34 @@ func (l *Library) file() string { return filepath.Join(l.dir, "library.json") }
 var unsafeChars = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
 func (l *Library) thumbPath(key string) string {
-	return filepath.Join(l.dir, "thumbs", unsafeChars.ReplaceAllString(key, "_"))
+	return filepath.Join(l.thumbDir, unsafeChars.ReplaceAllString(key, "_"))
+}
+
+// moveOldThumbs carries photos from the old thumbs folder (next to library.json)
+// into the current photo folder, so nothing has to be downloaded again.
+func (l *Library) moveOldThumbs() {
+	old := filepath.Join(l.dir, "thumbs")
+	if filepath.Clean(old) == filepath.Clean(l.thumbDir) {
+		return
+	}
+	entries, err := os.ReadDir(old)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || strings.HasSuffix(e.Name(), ".tmp") {
+			continue
+		}
+		src, dst := filepath.Join(old, e.Name()), filepath.Join(l.thumbDir, e.Name())
+		if _, err := os.Stat(dst); err != nil {
+			b, err := os.ReadFile(src)
+			if err != nil || os.WriteFile(dst, b, 0o644) != nil {
+				continue // keep the old copy if it couldn't be written
+			}
+		}
+		_ = os.Remove(src)
+	}
+	_ = os.Remove(old) // only removed if it is now empty
 }
 
 func (l *Library) queueThumb(a *Album) {
@@ -242,10 +274,10 @@ func (l *Library) WriteBackup(w io.Writer) error {
 	if err := add("library.json", l.file()); err != nil {
 		return err
 	}
-	entries, _ := os.ReadDir(filepath.Join(l.dir, "thumbs"))
+	entries, _ := os.ReadDir(l.thumbDir)
 	for _, e := range entries {
 		if !e.IsDir() && !strings.HasSuffix(e.Name(), ".tmp") {
-			if err := add("thumbs/"+e.Name(), filepath.Join(l.dir, "thumbs", e.Name())); err != nil {
+			if err := add("thumbs/"+e.Name(), filepath.Join(l.thumbDir, e.Name())); err != nil {
 				return err
 			}
 		}
@@ -274,7 +306,7 @@ func (l *Library) Restore(zipBytes []byte) (int, error) {
 			}
 		case strings.HasPrefix(f.Name, "thumbs/"):
 			name := unsafeChars.ReplaceAllString(strings.TrimPrefix(f.Name, "thumbs/"), "_")
-			p := filepath.Join(l.dir, "thumbs", name)
+			p := filepath.Join(l.thumbDir, name)
 			if _, err := os.Stat(p); err != nil {
 				_ = os.WriteFile(p, b, 0o644)
 			}

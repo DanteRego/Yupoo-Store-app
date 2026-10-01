@@ -33,6 +33,18 @@ func dataDir() string {
 	return "KitLibraryData"
 }
 
+// thumbsDir is where cover photos are kept. They go on the M: drive when it is
+// plugged in; otherwise they stay next to library.json.
+func thumbsDir() string {
+	if d := os.Getenv("KIT_THUMBS_DIR"); d != "" {
+		return d
+	}
+	if st, err := os.Stat(`M:\`); err == nil && st.IsDir() {
+		return `M:\Kit Library\Thumbnails`
+	}
+	return filepath.Join(dataDir(), "thumbs")
+}
+
 func downloadsDir() string {
 	if d := os.Getenv("KIT_DOWNLOADS_DIR"); d != "" {
 		return d
@@ -61,7 +73,7 @@ func uniquePath(dir, name string) string {
 
 // StartApp opens the library and serves the library page on a private local address.
 func StartApp() (*App, error) {
-	lib, err := OpenLibrary(dataDir())
+	lib, err := OpenLibrary(dataDir(), thumbsDir())
 	if err != nil {
 		return nil, err
 	}

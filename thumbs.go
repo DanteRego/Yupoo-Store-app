@@ -57,7 +57,7 @@ var (
 // reached it yet, the photo is fetched right away so the library never waits.
 func (l *Library) EnsureThumb(name string) ([]byte, error) {
 	name = unsafeChars.ReplaceAllString(name, "_")
-	p := filepath.Join(l.dir, "thumbs", name)
+	p := filepath.Join(l.thumbDir, name)
 	if b, err := os.ReadFile(p); err == nil {
 		return b, nil
 	}
