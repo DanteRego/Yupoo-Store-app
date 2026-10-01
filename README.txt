@@ -17,7 +17,10 @@ USING IT
 - Browse normally. The green bar at the bottom shows how many items were saved
   from each page.
     Back              - go back a page
-    Save whole store  - saves every page of that supplier's catalog
+    Save whole store  - saves every page of that supplier's catalog. It keeps
+                        going if you leave the store: the progress moves to a
+                        card in the bottom-right corner (– shrinks it, click the
+                        round badge to bring it back, Open store goes back)
                         (about 2 seconds per page so Yupoo doesn't block you)
     Library           - back to your library
 - In the library:

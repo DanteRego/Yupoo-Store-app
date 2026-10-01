@@ -15,7 +15,9 @@ The owner is new to programming: explain changes in plain words and keep steps s
 ## Where things are
 - `web/teams.js` — team dictionary (Chinese/slang → English), kit types (主场 = Home…), extras (长袖 = Long Sleeve…) and the title parser. Most "this kit is sorted wrong" fixes go here.
 - `web/library.html`, `web/library.js` — the Library page (sidebar, searchable dropdown filters, cards, store renaming, CSV, backup).
-- `web/capture.js` — runs on Yupoo pages inside the app: reads albums, the green bar, "Save whole store".
+- `web/capture.js` — runs on Yupoo pages inside the app: reads albums, the green bar (starts/stops "Save whole store" and shows its progress on that store).
+- `crawl.go` — "Save whole store" itself. Runs inside the app so it keeps going while the owner browses elsewhere; reads store pages with its own small reader (same rules as `extractAlbums` in capture.js — keep the two in step). One store at a time.
+- `web/crawlbar.js` — loaded on every page (Yupoo and Library): the bottom-right progress card, which shrinks to a round badge with "–".
 - `store.go` — the saved library (`%APPDATA%\YupooLibrary\library.json`), backup/restore, `my-teams.txt`, your store names.
 - `thumbs.go` — downloads and shrinks cover photos (Yupoo needs a Referer header).
 - `server.go` — local web server + API the Library page calls (token-protected); data folder locations
@@ -28,5 +30,5 @@ The owner is new to programming: explain changes in plain words and keep steps s
   Add fields; don't rename or remove them.
 - Teams are worked out from titles every time the library opens, so dictionary fixes
   apply to already-saved items automatically.
-- Yupoo blocks fast scraping: keep the 1.5–2.5 s delay between pages in "Save whole store".
+- Yupoo blocks fast scraping: keep the 1.5–2.5 s delay between pages in "Save whole store" (in `crawl.go`).
 - `web/teams.js` is also used by the old Firefox add-on; it must stay plain browser JavaScript.

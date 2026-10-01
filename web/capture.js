@@ -11,7 +11,6 @@
     const HOST = location.hostname;
     const STORE = HOST.split(".")[0];
 
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const clean = (s) => String(s || "").replace(/\s+/g, " ").trim();
     const absUrl = (u) => {
       if (!u || u.startsWith("data:")) return "";
@@ -102,61 +101,25 @@
     }
 
     // ---------- save the whole store ----------
-    let crawling = false, stopCrawl = false, crawlMsg = "";
+    // The app does the saving (crawl.go), so it keeps going after you leave this page.
+    // crawlbar.js keeps window.__kitCrawl up to date with its progress.
+    const crawl = window.__kitCrawl;
+    let notice = "", noticeTimer = null;
+    const myCrawl = () => { const s = crawl && crawl.status; return s && s.active && s.host === HOST ? s : null; };
 
-    function pageUrl(n) {
-      const keepPath = /^\/(categories|search)/.test(location.pathname);
-      const u = keepPath ? new URL(location.href) : new URL("/albums", location.origin);
-      u.hash = "";
-      u.searchParams.set("page", n);
-      return u.href;
-    }
-    function detectMaxPage(doc) {
-      let max = 0;
-      doc.querySelectorAll('a[href*="page="]').forEach((a) => {
-        const m = (a.getAttribute("href") || "").match(/[?&]page=(\d+)/);
-        if (m) max = Math.max(max, +m[1]);
-      });
-      doc.querySelectorAll('input[name="page"][max]').forEach((i) => {
-        max = Math.max(max, parseInt(i.getAttribute("max"), 10) || 0);
-      });
-      const m = (doc.body ? doc.body.textContent : "").match(/共\s*(\d+)\s*页|of\s+(\d+)\s+pages?/i);
-      if (m) max = Math.max(max, +(m[1] || m[2]));
-      return max || null;
+    function say(msg) {
+      notice = msg;
+      clearTimeout(noticeTimer);
+      noticeTimer = setTimeout(() => { notice = ""; renderPill(); }, 6000);
+      renderPill();
     }
 
     async function saveWholeStore() {
-      if (crawling) { stopCrawl = true; return; }
-      crawling = true; stopCrawl = false;
-      let page = 1, maxPage = null, prevSig = "", newCount = 0, seen = 0;
-      while (true) {
-        if (stopCrawl) { crawlMsg = `Stopped — ${newCount} new items saved.`; break; }
-        crawlMsg = `Saving page ${page}${maxPage ? " of " + maxPage : ""}… ${newCount} new`;
-        renderPill();
-        let doc;
-        try {
-          const res = await fetch(pageUrl(page), { credentials: "include" });
-          if (!res.ok) throw new Error("HTTP " + res.status);
-          doc = new DOMParser().parseFromString(await res.text(), "text/html");
-        } catch (e) {
-          crawlMsg = `Yupoo stopped answering on page ${page}. Wait a minute, then try again — saved items are kept.`;
-          break;
-        }
-        if (page === 1) maxPage = detectMaxPage(doc);
-        const found = extractAlbums(doc);
-        const sig = found.map((a) => a.id).join(",");
-        if (!found.length || sig === prevSig) { crawlMsg = `Done — ${seen} items in this store, ${newCount} new.`; break; }
-        const res = await save(found, true);
-        newCount += res.added || 0;
-        seen += found.length;
-        if (maxPage && page >= maxPage) { crawlMsg = `Done — ${seen} items in this store, ${newCount} new.`; break; }
-        if (page >= 500) break;
-        prevSig = sig;
-        page++;
-        await sleep(1500 + Math.random() * 1000); // go slowly so Yupoo doesn't throttle
-      }
-      crawling = false;
-      renderPill();
+      if (!crawl) return;
+      const s = myCrawl();
+      if (s && s.running) { await crawl.stop(); return; }
+      const r = await crawl.start(location.href, document.cookie);
+      if (r.error) say(r.error);
     }
 
     // ---------- the bar at the bottom ----------
@@ -165,17 +128,29 @@
     const shadow = host.attachShadow({ mode: "open" });
     shadow.innerHTML = `<style>
       :host { all: initial; }
+      [hidden] { display: none !important; }
       * { box-sizing: border-box; font-family: "Segoe UI", -apple-system, Roboto, Arial, "Microsoft YaHei", "PingFang SC", sans-serif; }
       .pill { display: flex; align-items: center; gap: 8px; background: #1f7a4d; color: #fff; padding: 8px;
-        border-radius: 999px; box-shadow: 0 4px 18px rgba(0,0,0,.28); font-size: 13px; white-space: nowrap; }
-      .msg { margin: 0 6px; }
+        border-radius: 999px; box-shadow: 0 4px 18px rgba(0,0,0,.28); font-size: 13px; white-space: nowrap;
+        max-width: calc(100vw - 24px); }
+      button { flex-shrink: 0; }
+      .msg { margin: 0 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
       button { cursor: pointer; border: 0; border-radius: 999px; padding: 7px 13px; font-size: 13px;
         background: rgba(255,255,255,.18); color: #fff; font-family: inherit; }
       button:hover { background: rgba(255,255,255,.3); }
       button.main { background: #fff; color: #1f7a4d; font-weight: 600; }
+      button.x { padding: 7px 10px; }
+      .prog { display: flex; align-items: center; gap: 8px; margin: 0 4px; }
+      .track { position: relative; width: 170px; min-width: 50px; flex-shrink: 1; height: 8px; border-radius: 99px; background: rgba(0,0,0,.25); overflow: hidden; }
+      .fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 99px; background: linear-gradient(90deg, #b9f3d4, #fff); transition: width .6s ease; }
+      .fill.unknown { width: 35% !important; animation: slide 1.4s ease-in-out infinite; }
+      @keyframes slide { from { left: -35%; } to { left: 100%; } }
+      .pct { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 34px; }
     </style><div class="pill">
       <button data-act="back" title="Back">◀ Back</button>
       <span class="msg"></span>
+      <span class="prog" hidden><span class="track"><span class="fill"></span></span><span class="pct"></span></span>
+      <button data-act="dismiss" class="x" title="Close this message" hidden>✕</button>
       <button data-act="page" hidden>Save this page</button>
       <button data-act="store">Save whole store</button>
       <button data-act="open" class="main">Library</button></div>`;
@@ -183,12 +158,24 @@
 
     function renderPill() {
       if (!host.isConnected) document.documentElement.appendChild(host);
+      const s = myCrawl();
       let msg;
-      if (crawling || crawlMsg) msg = crawlMsg;
+      if (notice) msg = notice;
+      else if (s) msg = s.running ? crawl.detail(s) : s.msg;
       else if (!settings.autoSave) msg = "Auto-save is off";
       else msg = savedThisPage ? `✓ ${savedThisPage} item${savedThisPage === 1 ? "" : "s"} saved from this page` : "Yupoo Library";
       $(".msg").textContent = msg;
-      $('[data-act="store"]').textContent = crawling ? "Stop" : "Save whole store";
+      const running = !!(s && s.running);
+      $(".prog").hidden = !running;
+      if (running) {
+        const f = crawl.fraction(s);
+        $(".fill").classList.toggle("unknown", f == null);
+        $(".fill").style.width = f == null ? "" : Math.round(f * 100) + "%";
+        $(".pct").textContent = f == null ? "" : Math.round(f * 100) + "%";
+        $(".pct").hidden = f == null;
+      }
+      $('[data-act="dismiss"]').hidden = !(s && !s.running) || !!notice;
+      $('[data-act="store"]').textContent = running ? "Stop" : "Save whole store";
       $('[data-act="page"]').hidden = settings.autoSave;
     }
 
@@ -199,8 +186,16 @@
       if (act === "back") history.back();
       else if (act === "open") location.href = bridge.libraryUrl;
       else if (act === "store") saveWholeStore();
+      else if (act === "dismiss") crawl.dismiss();
       else if (act === "page") captureThisPage(true);
     });
+
+    if (crawl) crawl.subscribe((s) => {
+      // Tell the app the progress is showing here, so leaving this page slides it into the corner.
+      if (s.active && s.host === HOST && s.uiMode !== "bar") { s.uiMode = "bar"; crawl.setUI("bar", s.uiMin); }
+      renderPill();
+    });
+
 
     let moTimer = null;
     (async () => {

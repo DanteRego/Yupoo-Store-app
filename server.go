@@ -19,6 +19,7 @@ var webFiles embed.FS
 
 type App struct {
 	lib     *Library
+	crawl   *Crawler
 	token   string
 	baseURL string
 }
@@ -100,7 +101,7 @@ func StartApp() (*App, error) {
 	}
 	tok := make([]byte, 16)
 	_, _ = rand.Read(tok)
-	app := &App{lib: lib, token: hex.EncodeToString(tok)}
+	app := &App{lib: lib, crawl: NewCrawler(lib), token: hex.EncodeToString(tok)}
 
 	addr := "127.0.0.1:0"
 	if p := os.Getenv("KIT_PORT"); p != "" {
@@ -135,6 +136,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("/{$}", static("library.html", "text/html; charset=utf-8"))
 	mux.HandleFunc("/teams.js", static("teams.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/library.js", static("library.js", "text/javascript; charset=utf-8"))
+	mux.HandleFunc("/crawlbar.js", static("crawlbar.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/icon.svg", static("icon.svg", "image/svg+xml"))
 
 	mux.HandleFunc("/thumb/{key}", func(w http.ResponseWriter, r *http.Request) {
@@ -176,6 +178,19 @@ func (a *App) routes() http.Handler {
 
 	mux.HandleFunc("GET /api/state", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 		return a.lib.StateJSON()
+	}))
+	// "Save whole store" progress. Inside the app window, pages use the kitCrawl* bindings
+	// instead (see main_windows.go); these are for the Mac/Linux test mode.
+	mux.HandleFunc("GET /api/crawl", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		return a.crawl.Status(), nil
+	}))
+	mux.HandleFunc("POST /api/crawl/{act}", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in struct {
+			URL, Cookie, Mode string
+			Min               bool
+		}
+		_ = decode(r, &in)
+		return a.crawlAction(r.PathValue("act"), in.URL, in.Cookie, in.Mode, in.Min), nil
 	}))
 	mux.HandleFunc("POST /api/save-albums", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 		var in []AlbumIn

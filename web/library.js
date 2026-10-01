@@ -417,4 +417,10 @@ $(".autosave").addEventListener("change", (e) => {
 });
 $(".restore").addEventListener("change", (e) => { if (e.target.files[0]) restore(e.target.files[0]); e.target.value = ""; });
 
+// When "Save whole store" finishes (it keeps running while you're here), show the new items.
+window.addEventListener("kit-crawl", (e) => {
+  const { status, previous } = e.detail;
+  if (previous && previous.running && !status.running && status.new) refresh();
+});
+
 load().then(renderAll).catch((e) => toast("Couldn't load your library: " + e.message));

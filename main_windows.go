@@ -49,7 +49,10 @@ func main() {
 		return map[string]int{"added": added, "total": total}, nil
 	})
 	_ = w.Bind("kitSettings", func() Settings { return app.lib.GetSettings() })
-	w.Init(bridgeJS(app.baseURL) + captureJS)
+	_ = w.Bind("kitCrawl", func(act, pageURL, cookie, mode string, min bool) CrawlReply {
+		return app.crawlAction(act, pageURL, cookie, mode, min)
+	})
+	w.Init(bridgeJS(app.baseURL) + crawlbarJS + captureJS)
 	w.Navigate(app.baseURL)
 	w.Run()
 }
