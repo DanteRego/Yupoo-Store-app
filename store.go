@@ -48,6 +48,8 @@ type libraryFile struct {
 	Albums   map[string]*Album `json:"albums"`
 	Aliases  map[string]string `json:"aliases"`
 	Settings Settings          `json:"settings"`
+	// StoreNames holds your own names for stores (original store name -> your name).
+	StoreNames map[string]string `json:"storeNames,omitempty"`
 }
 
 type thumbJob struct{ key, host, cover string }
@@ -83,6 +85,9 @@ func OpenLibrary(dir, thumbDir string) (*Library, error) {
 	}
 	if l.data.Aliases == nil {
 		l.data.Aliases = map[string]string{}
+	}
+	if l.data.StoreNames == nil {
+		l.data.StoreNames = map[string]string{}
 	}
 	l.ensureMyTeamsFile()
 	go l.thumbWorker()
@@ -227,6 +232,19 @@ func (l *Library) SetAliases(a map[string]string) {
 	l.scheduleSave()
 }
 
+// SetStoreName gives a store your own name. An empty name goes back to the original.
+func (l *Library) SetStoreName(store, name string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	name = strings.TrimSpace(name)
+	if name == "" || name == store {
+		delete(l.data.StoreNames, store)
+	} else {
+		l.data.StoreNames[store] = name
+	}
+	l.scheduleSave()
+}
+
 func (l *Library) SetSettings(s Settings) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -244,11 +262,12 @@ func (l *Library) StateJSON() ([]byte, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return json.Marshal(map[string]interface{}{
-		"library":  map[string]interface{}{"albums": l.data.Albums},
-		"aliases":  l.data.Aliases,
-		"myTeams":  l.myTeams(),
-		"settings": l.data.Settings,
-		"version":  l.version,
+		"library":    map[string]interface{}{"albums": l.data.Albums},
+		"aliases":    l.data.Aliases,
+		"myTeams":    l.myTeams(),
+		"settings":   l.data.Settings,
+		"storeNames": l.data.StoreNames,
+		"version":    l.version,
 	})
 }
 
@@ -326,6 +345,11 @@ func (l *Library) Restore(zipBytes []byte) (int, error) {
 	}
 	for k, v := range incoming.Aliases {
 		l.data.Aliases[k] = v
+	}
+	for k, v := range incoming.StoreNames {
+		if _, mine := l.data.StoreNames[k]; !mine {
+			l.data.StoreNames[k] = v
+		}
 	}
 	l.scheduleSave()
 	return added, nil

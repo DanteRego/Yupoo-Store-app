@@ -3,9 +3,18 @@ const TOKEN = document.querySelector('meta[name="kit-token"]').content;
 const PAGE_SIZE = 120;
 
 const S = {
-  lib: { albums: {} }, aliases: {}, myTeams: {}, settings: { autoSave: true },
-  team: "", store: "", kit: "", q: "", teamQ: "", sort: "team", shown: PAGE_SIZE
+  lib: { albums: {} }, aliases: {}, myTeams: {}, settings: { autoSave: true }, storeNames: {},
+  team: "", store: "", kit: "", season: "", extra: "", q: "", teamQ: "", sort: "team", shown: PAGE_SIZE
 };
+// The dropdown filters above the kits. "f" is the name of the filter in S.
+const FILTERS = [
+  { f: "team", label: "Team", any: "Any team" },
+  { f: "season", label: "Season", any: "Any season" },
+  { f: "kit", label: "Kit type", any: "Any kit type" },
+  { f: "extra", label: "Extras", any: "Any extras" },
+  { f: "store", label: "Store", any: "Any store" }
+];
+let openDD = ""; // which dropdown is open right now
 let matcher = YO_buildMatcher({});
 const cache = new Map();
 
@@ -44,12 +53,15 @@ async function load() {
   S.aliases = d.aliases || {};
   S.myTeams = d.myTeams || {};
   S.settings = Object.assign({ autoSave: true }, d.settings || {});
+  S.storeNames = d.storeNames || {};
   matcher = YO_buildMatcher(allAliases());
   cache.clear();
 }
 const all = () => Object.values(S.lib.albums);
 // Names learned with ✎ Team, plus your my-teams.txt list (which wins).
 const allAliases = () => Object.assign({}, S.aliases, S.myTeams);
+// Your own name for a store (set with ✎ in the Stores list), or its original name.
+const storeName = (s) => S.storeNames[s] || s;
 
 function info(a) {
   const ck = a.key + "|" + a.title;
@@ -71,8 +83,9 @@ function teamMatches(team, q) {
   const al = allAliases();
   return Object.keys(al).some((a) => al[a] === team && a.toLowerCase().includes(q));
 }
-const item = (attr, val, label, n, active, extra, openUrl) =>
-  `<div class="item ${active ? "on" : ""} ${extra || ""}" role="button" tabindex="0" data-${attr}="${esc(val)}"><span class="name">${esc(label)}</span>` +
+const item = (attr, val, label, n, active, extra, openUrl, renameStore) =>
+  `<div class="item ${active ? "on" : ""} ${extra || ""}" role="button" tabindex="0" data-${attr}="${esc(val)}"><span class="name" title="${esc(label)}">${esc(label)}</span>` +
+  (renameStore ? `<button class="ren" data-rename-store="${esc(val)}" title="Rename this store">✎</button>` : "") +
   (openUrl ? `<a class="open" href="${esc(openUrl)}" title="Open this store">open ↗</a>` : "") +
   `<span class="c">${n}</span></div>`;
 
@@ -99,39 +112,111 @@ function renderStores() {
   const counts = new Map(), hosts = new Map();
   all().forEach((a) => { counts.set(a.store, (counts.get(a.store) || 0) + 1); hosts.set(a.store, a.host); });
   let html = item("store", "", "All stores", all().length, S.store === "");
-  [...counts.keys()].sort().forEach((s) => {
-    html += item("store", s, s, counts.get(s), S.store === s, "", "https://" + hosts.get(s) + "/albums");
+  [...counts.keys()].sort((a, b) => storeName(a).localeCompare(storeName(b))).forEach((s) => {
+    html += item("store", s, storeName(s), counts.get(s), S.store === s, "", "https://" + hosts.get(s) + "/albums", true);
   });
   $(".stores").innerHTML = html;
 }
 
-function renderKitOptions() {
-  const kits = new Set(); let none = false;
-  all().forEach((a) => { const k = info(a).kit; if (k) kits.add(k); else none = true; });
-  const order = ["Home", "Away", "Second Away", "Third", "Goalkeeper", "Training", "Pre-Match"];
-  const sel = $(".kit");
-  sel.innerHTML = `<option value="">Any kit type</option>` +
-    [...kits].sort((a, b) => order.indexOf(a) - order.indexOf(b)).map((k) => `<option>${esc(k)}</option>`).join("") +
-    (none ? `<option value="—">No kit type in title</option>` : "");
-  sel.value = S.kit;
-  if (sel.value !== S.kit) S.kit = "";
+// ---------- dropdown filters ----------
+// What a kit counts as for each filter. "—" means the title doesn't say.
+function vals(a, f) {
+  const p = info(a);
+  if (f === "team") return [p.team || "__unsorted"];
+  if (f === "season") return [p.season || "—"];
+  if (f === "kit") return [p.kit || "—"];
+  if (f === "extra") return p.extras.length ? p.extras : ["—"];
+  return [a.store];
+}
+function optionLabel(f, v) {
+  if (v === "__unsorted") return "⚠ Unsorted";
+  if (v === "—") return { season: "No season in title", kit: "No kit type in title", extra: "No extras" }[f];
+  return f === "store" ? storeName(v) : v;
+}
+const KIT_ORDER = ["Home", "Away", "Second Away", "Third", "Goalkeeper", "Training", "Pre-Match"];
+function optionOrder(f) {
+  if (f === "season") return (a, b) => (parseInt(b, 10) || 0) - (parseInt(a, 10) || 0) || b.localeCompare(a);
+  if (f === "kit") return (a, b) => (a === "—") - (b === "—") || KIT_ORDER.indexOf(a) - KIT_ORDER.indexOf(b);
+  return (a, b) => (a === "__unsorted" ? -1 : b === "__unsorted" ? 1 : 0) || (a === "—") - (b === "—") ||
+    optionLabel(f, a).localeCompare(optionLabel(f, b));
+}
+// Typing in a dropdown's search box: teams also match their Chinese names, stores their original name.
+function optionMatches(f, v, q) {
+  if (!q) return true;
+  if (optionLabel(f, v).toLowerCase().includes(q)) return true;
+  if (f === "team" && v !== "__unsorted") return teamMatches(v, q);
+  if (f === "store") return v.toLowerCase().includes(q);
+  return false;
+}
+
+function renderFilters() {
+  const box = $(".dds");
+  if (!box.children.length) {
+    box.innerHTML = FILTERS.map(({ f }) =>
+      `<div class="dd" data-dd="${f}"><button class="dd-btn" data-dd-toggle="${f}"></button>` +
+      `<div class="dd-panel" hidden><input type="search" placeholder="Search…" autocomplete="off"><div class="dd-list"></div></div></div>`).join("");
+  }
+  FILTERS.forEach(({ f, label, any }) => {
+    const btn = box.querySelector(`[data-dd-toggle="${f}"]`);
+    btn.textContent = S[f] ? `${label}: ${optionLabel(f, S[f])} ▾` : `${any} ▾`;
+    btn.classList.toggle("on", !!S[f]);
+    btn.title = btn.textContent;
+    box.querySelector(`[data-dd="${f}"] .dd-panel`).hidden = openDD !== f;
+  });
+  if (openDD) renderOptions(openDD);
+  $(".clear").hidden = !(S.q || FILTERS.some(({ f }) => S[f]));
+}
+
+// The choices in one dropdown, with how many kits each would show (given the other filters).
+function renderOptions(f) {
+  const panel = $(`[data-dd="${f}"] .dd-panel`);
+  const q = panel.querySelector("input").value.toLowerCase().trim();
+  const counts = new Map(); let total = 0;
+  all().forEach((a) => {
+    if (!passes(a, f)) return;
+    total++;
+    new Set(vals(a, f)).forEach((v) => counts.set(v, (counts.get(v) || 0) + 1));
+  });
+  if (S[f] && !counts.has(S[f])) counts.set(S[f], 0); // keep your current choice visible
+  const any = FILTERS.find((x) => x.f === f).any;
+  let html = q ? "" : item("pick", "", any, total, !S[f]);
+  [...counts.keys()].sort(optionOrder(f)).filter((v) => optionMatches(f, v, q))
+    .forEach((v) => { html += item("pick", v, optionLabel(f, v), counts.get(v), S[f] === v, v === "__unsorted" ? "warn" : ""); });
+  panel.querySelector(".dd-list").innerHTML = html || `<div class="summary" style="padding:4px 8px">Nothing matches “${esc(q)}”.</div>`;
+}
+
+function toggleDD(f) {
+  openDD = openDD === f ? "" : f;
+  if (openDD) {
+    const input = $(`[data-dd="${f}"] input`);
+    input.value = "";
+    renderFilters();
+    input.focus();
+  } else renderFilters();
+}
+
+function pick(f, v) {
+  S[f] = v; openDD = ""; S.shown = PAGE_SIZE;
+  update();
+  $("main").scrollTop = 0;
 }
 
 // ---------- grid ----------
-function filtered() {
+// Does this kit pass every filter (except "skip") and the search box?
+function passes(a, skip) {
+  for (const { f } of FILTERS) {
+    if (f !== skip && S[f] && !vals(a, f).includes(S[f])) return false;
+  }
   const words = S.q.toLowerCase().split(/\s+/).filter(Boolean);
-  const list = all().filter((a) => {
-    const p = info(a);
-    if (S.store && a.store !== S.store) return false;
-    if (S.team === "__unsorted") { if (p.team) return false; }
-    else if (S.team && p.team !== S.team) return false;
-    if (S.kit && (p.kit || "—") !== S.kit) return false;
-    if (words.length) {
-      const hay = (p.english + " " + a.title + " " + a.store).toLowerCase();
-      if (!words.every((w) => hay.includes(w))) return false;
-    }
-    return true;
-  });
+  if (words.length) {
+    const hay = (info(a).english + " " + a.title + " " + a.store + " " + storeName(a.store)).toLowerCase();
+    if (!words.every((w) => hay.includes(w))) return false;
+  }
+  return true;
+}
+
+function filtered() {
+  const list = all().filter((a) => passes(a));
   const sk = (a) => info(a).seasonKey;
   const byTeam = (a, b) => {
     const ta = info(a).team, tb = info(b).team;
@@ -179,7 +264,7 @@ function renderGrid() {
       <div class="meta">
         <div class="en ${p.team ? "" : "unsorted"}">${esc(p.english)}</div>
         <div class="zh">${esc(a.title)}</div>
-        <div class="src">${esc(a.store)} · saved ${esc(fmtDate(a.firstSeen))}${p.edited ? ` · <span class="tag">your fix</span>` : ""}</div>
+        <div class="src">${esc(storeName(a.store))} · saved ${esc(fmtDate(a.firstSeen))}${p.edited ? ` · <span class="tag">your fix</span>` : ""}</div>
         <div class="row">
           <a href="${esc(a.link)}">Open album ↗</a>
           <button data-edit="${esc(a.key)}" title="Set the team">✎ Team</button>
@@ -205,8 +290,9 @@ function loadThumb(img, attempt) {
   img.src = "/thumb/" + encodeURIComponent(img.dataset.key.replace(/[^A-Za-z0-9._-]/g, "_")) + (attempt ? "?r=" + attempt : "");
 }
 
+function update() { renderTeams(); renderStores(); renderFilters(); renderGrid(); }
 function renderAll() {
-  renderTeams(); renderStores(); renderKitOptions(); renderGrid();
+  update();
   $(".autosave").checked = S.settings.autoSave;
 }
 async function refresh() {
@@ -240,6 +326,13 @@ async function removeKit(key) {
   await refresh();
 }
 
+async function renameStore(store) {
+  const input = prompt(`Rename this store\n\nOriginal name: ${store}\n\nType your own name for it. Leave empty to go back to the original name.`, storeName(store));
+  if (input === null) return;
+  await call("POST", "/api/store-name", { store, name: input.trim() });
+  await refresh();
+}
+
 const today = () => new Date().toISOString().slice(0, 10);
 
 async function exportCsv() {
@@ -247,7 +340,7 @@ async function exportCsv() {
   filtered().forEach((a) => {
     const p = info(a);
     rows.push([p.english, p.team || "Unsorted", p.season || "", p.kit || "", p.extras.join(", "),
-      a.store, a.title, a.count || "", a.link, fmtDate(a.firstSeen)]);
+      storeName(a.store), a.title, a.count || "", a.link, fmtDate(a.firstSeen)]);
   });
   const content = "﻿" + rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\r\n");
   try {
@@ -285,10 +378,19 @@ function openLink(text) {
 // ---------- events ----------
 document.addEventListener("click", (e) => {
   if (e.target.closest("a.open")) return; // let "open ↗" links navigate
+  // Clicking anywhere outside an open dropdown closes it.
+  if (openDD && !e.target.closest(".dd")) { openDD = ""; renderFilters(); }
   const b = e.target.closest("button, .item");
   if (!b) return;
-  if (b.dataset.team !== undefined) { S.team = b.dataset.team; S.shown = PAGE_SIZE; renderTeams(); renderGrid(); $("main").scrollTop = 0; }
-  else if (b.dataset.store !== undefined) { S.store = b.dataset.store; S.team = ""; S.shown = PAGE_SIZE; renderTeams(); renderStores(); renderGrid(); $("main").scrollTop = 0; }
+  if (b.dataset.renameStore !== undefined) renameStore(b.dataset.renameStore);
+  else if (b.dataset.ddToggle) toggleDD(b.dataset.ddToggle);
+  else if (b.dataset.pick !== undefined) pick(b.closest("[data-dd]").dataset.dd, b.dataset.pick);
+  else if (b.dataset.team !== undefined) { S.team = b.dataset.team; S.shown = PAGE_SIZE; update(); $("main").scrollTop = 0; }
+  else if (b.dataset.store !== undefined) { S.store = b.dataset.store; S.team = ""; S.shown = PAGE_SIZE; update(); $("main").scrollTop = 0; }
+  else if (b.classList.contains("clear")) {
+    FILTERS.forEach(({ f }) => { S[f] = ""; });
+    S.q = ""; $(".q").value = ""; S.shown = PAGE_SIZE; update();
+  }
   else if (b.dataset.edit) editTeam(b.dataset.edit);
   else if (b.dataset.remove) removeKit(b.dataset.remove);
   else if (b.dataset.act === "csv") exportCsv();
@@ -297,8 +399,17 @@ document.addEventListener("click", (e) => {
 });
 $("form.go").addEventListener("submit", (e) => { e.preventDefault(); openLink($(".link").value); });
 $(".teamq").addEventListener("input", (e) => { S.teamQ = e.target.value; renderTeams(); });
-$(".q").addEventListener("input", (e) => { S.q = e.target.value; S.shown = PAGE_SIZE; renderGrid(); });
-$(".kit").addEventListener("change", (e) => { S.kit = e.target.value; S.shown = PAGE_SIZE; renderGrid(); });
+$(".q").addEventListener("input", (e) => { S.q = e.target.value; S.shown = PAGE_SIZE; renderFilters(); renderGrid(); });
+// Typing in a dropdown's search box narrows its list. Enter picks the top match, Esc closes it.
+$(".dds").addEventListener("input", (e) => { if (openDD) renderOptions(openDD); });
+$(".dds").addEventListener("keydown", (e) => {
+  if (!openDD || e.target.tagName !== "INPUT") return;
+  if (e.key === "Escape") { openDD = ""; renderFilters(); }
+  else if (e.key === "Enter") {
+    const first = $(`[data-dd="${openDD}"] .dd-list .item`);
+    if (first) pick(openDD, first.dataset.pick);
+  }
+});
 $(".sort").addEventListener("change", (e) => { S.sort = e.target.value; renderGrid(); });
 $(".autosave").addEventListener("change", (e) => {
   S.settings.autoSave = e.target.checked;

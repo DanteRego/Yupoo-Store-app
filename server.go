@@ -172,6 +172,14 @@ func (a *App) routes() http.Handler {
 		a.lib.SetTeam(in.Key, in.Team)
 		return true, nil
 	}))
+	mux.HandleFunc("POST /api/store-name", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in struct{ Store, Name string }
+		if err := decode(r, &in); err != nil {
+			return nil, err
+		}
+		a.lib.SetStoreName(in.Store, in.Name)
+		return true, nil
+	}))
 	mux.HandleFunc("POST /api/remove", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 		var in struct{ Keys []string }
 		if err := decode(r, &in); err != nil {
