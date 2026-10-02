@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="kit-token" content="{{TOKEN}}">
+<title>Catalog — Yupoo Library</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="catalog">
+  <header>
+    <h1><img src="icon.svg" alt="">Catalog <span class="count"></span></h1>
+    <div class="actions">
+      <button class="navbtn" data-act="library" title="Back to all your saved items">← Library</button>
+      <button class="navbtn win" data-act="newwin" title="Open the Catalog in its own window">⧉ New window</button>
+    </div>
+  </header>
+  <div class="body">
+    <aside>
+      <h3>Collections</h3>
+      <div class="list cols"></div>
+      <button class="newcol" data-act="new">＋ New collection</button>
+    </aside>
+    <main>
+      <div class="coltitle">
+        <h2 class="colname"></h2>
+        <span class="sub colsub"></span>
+        <span class="grow"></span>
+        <button data-act="rename" class="needcol">✎ Rename</button>
+        <button data-act="csv">Export CSV</button>
+        <button data-act="delete" class="needcol">🗑 Delete collection</button>
+      </div>
+      <div class="filters">
+        <input class="q" type="search" placeholder="Search this collection — name, team, store, note…">
+        <select class="sort">
+          <option value="added">Recently added</option>
+          <option value="oldest">Oldest first</option>
+          <option value="cat">Category</option>
+          <option value="name">Name A–Z</option>
+          <option value="store">Store</option>
+        </select>
+      </div>
+      <div class="summary"></div>
+      <div class="grid"></div>
+    </main>
+  </div>
+  <div class="toast"></div>
+  <script src="teams.js"></script>
+  <script src="categories.js"></script>
+  <script src="shared.js"></script>
+  <script src="catalog.js"></script>
+  <script src="crawlbar.js"></script>
+</body>
+</html>

@@ -43,6 +43,14 @@ USING IT
     Untick "Auto-save while browsing" to pause; the green bar then offers
     "Save this page" instead.
 
+- The Catalog (📒 Catalog at the top of the library; ⧉ opens it in its own window):
+    your own collections of items, e.g. a "Wishlist" of things to order later.
+    ☆ on a card   - add that item to a collection (or make a new one); turns ★ gold
+    ☑ Select      - tick several items, then "☆ Add to collection"
+    In the Catalog: notes per item (size, quantity…), ✕ takes an item out (Undo),
+    ✎ rename / 🗑 delete a collection (the items stay in your library),
+    Export CSV saves the list you're looking at.
+
 WHERE YOUR DATA LIVES
   %APPDATA%\YupooLibrary\library.json   your items
   %APPDATA%\YupooLibrary\thumbs\        photo snapshots

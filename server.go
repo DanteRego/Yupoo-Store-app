@@ -125,7 +125,7 @@ func (a *App) routes() http.Handler {
 				http.NotFound(w, r)
 				return
 			}
-			if name == "library.html" {
+			if strings.HasSuffix(name, ".html") {
 				b = []byte(strings.Replace(string(b), "{{TOKEN}}", a.token, 1))
 			}
 			w.Header().Set("Content-Type", ctype)
@@ -134,9 +134,13 @@ func (a *App) routes() http.Handler {
 		}
 	}
 	mux.HandleFunc("/{$}", static("library.html", "text/html; charset=utf-8"))
+	mux.HandleFunc("/catalog", static("catalog.html", "text/html; charset=utf-8"))
 	mux.HandleFunc("/teams.js", static("teams.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/categories.js", static("categories.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/library.js", static("library.js", "text/javascript; charset=utf-8"))
+	mux.HandleFunc("/catalog.js", static("catalog.js", "text/javascript; charset=utf-8"))
+	mux.HandleFunc("/shared.js", static("shared.js", "text/javascript; charset=utf-8"))
+	mux.HandleFunc("/app.css", static("app.css", "text/css; charset=utf-8"))
 	mux.HandleFunc("/crawlbar.js", static("crawlbar.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/icon.svg", static("icon.svg", "image/svg+xml"))
 
@@ -234,6 +238,21 @@ func (a *App) routes() http.Handler {
 			return nil, err
 		}
 		return map[string]int{"changed": a.lib.SetCategories(in.Keys, in.Category)}, nil
+	}))
+	// The Catalog's collections (see collections.go).
+	mux.HandleFunc("GET /api/collections", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		return a.lib.CollectionsList(), nil
+	}))
+	mux.HandleFunc("POST /api/collections/{act}", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in CollectionRequest
+		if err := decode(r, &in); err != nil {
+			return nil, err
+		}
+		c, n, err := a.lib.CollectionAction(r.PathValue("act"), in)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"collection": c, "changed": n}, nil
 	}))
 	mux.HandleFunc("POST /api/store-category", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 		var in struct{ Store, Category string }

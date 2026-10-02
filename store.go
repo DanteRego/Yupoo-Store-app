@@ -54,6 +54,8 @@ type libraryFile struct {
 	StoreNames map[string]string `json:"storeNames,omitempty"`
 	// StoreCategories: what a store sells, used when an item's title doesn't say (store -> "Shoes › Sneakers").
 	StoreCategories map[string]string `json:"storeCategories,omitempty"`
+	// Collections are the Catalog: your own lists of saved items, like "Wishlist".
+	Collections []*Collection `json:"collections,omitempty"`
 }
 
 type thumbJob struct{ key, host, cover string }
@@ -226,6 +228,7 @@ func (l *Library) Remove(keys []string) {
 		delete(l.data.Albums, k)
 		_ = os.Remove(l.thumbPath(k))
 	}
+	l.forgetInCollections(keys)
 	l.scheduleSave()
 }
 
@@ -314,6 +317,7 @@ func (l *Library) StateJSON() ([]byte, error) {
 		"settings":        l.data.Settings,
 		"storeNames":      l.data.StoreNames,
 		"storeCategories": l.data.StoreCategories,
+		"collections":     l.data.Collections,
 		"version":         l.version,
 	})
 }
@@ -403,6 +407,7 @@ func (l *Library) Restore(zipBytes []byte) (int, error) {
 			l.data.StoreCategories[k] = v
 		}
 	}
+	l.mergeCollections(incoming.Collections)
 	l.scheduleSave()
 	return added, nil
 }

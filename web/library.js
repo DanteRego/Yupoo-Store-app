@@ -1,11 +1,9 @@
 // Yupoo Library app — the library page: every item you've saved, from every store, in one place.
-const TOKEN = document.querySelector('meta[name="kit-token"]').content;
+// Shared pieces (talking to the app, item names, photos, collections) are in shared.js.
 const PAGE_SIZE = 120;
 
-const S = {
-  lib: { albums: {} }, aliases: {}, myTeams: {}, settings: { autoSave: true }, storeNames: {}, storeCats: {},
-  cat: "", team: "", store: "", kit: "", season: "", extra: "", q: "", sort: "team", shown: PAGE_SIZE
-};
+// The Library's own filters, added to the shared S.
+Object.assign(S, { cat: "", team: "", store: "", kit: "", season: "", extra: "", q: "", sort: "team", shown: PAGE_SIZE });
 // The dropdown filters above the items. "f" is the name of the filter in S.
 const FILTERS = [
   { f: "cat", label: "Category", any: "Any category" },
@@ -16,81 +14,6 @@ const FILTERS = [
   { f: "store", label: "Store", any: "Any store" }
 ];
 let openDD = ""; // which dropdown is open right now
-let matcher = YO_buildMatcher({});
-const cache = new Map();
-
-const $ = (s) => document.querySelector(s);
-const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
-  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const fmtDate = (t) => t ? new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
-
-// ---------- talking to the app ----------
-async function call(method, path, body, raw) {
-  const res = await fetch(path, {
-    method,
-    headers: Object.assign({ "X-Kit-Token": TOKEN }, raw ? {} : { "Content-Type": "application/json" }),
-    body: body === undefined ? undefined : (raw ? body : JSON.stringify(body))
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || res.statusText);
-  return data;
-}
-
-let toastTimer = null, toastAction = null;
-// A message at the bottom. With actionLabel, it also gets a button (e.g. Undo) and stays a bit longer.
-function toast(msg, actionLabel, action) {
-  const t = $(".toast");
-  t.innerHTML = esc(msg) + (actionLabel ? ` <button class="toast-act">${esc(actionLabel)}</button>` : "");
-  toastAction = action || null;
-  t.classList.toggle("act", !!actionLabel);
-  t.classList.add("show");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.classList.remove("show", "act"); toastAction = null; }, actionLabel ? 15000 : 4500);
-}
-
-// ---------- data ----------
-let version = -1;
-async function load() {
-  const d = await call("GET", "/api/state");
-  version = d.version;
-  S.lib = d.library || { albums: {} };
-  S.aliases = d.aliases || {};
-  S.myTeams = d.myTeams || {};
-  S.settings = Object.assign({ autoSave: true }, d.settings || {});
-  S.storeNames = d.storeNames || {};
-  S.storeCats = d.storeCategories || {};
-  matcher = YO_buildMatcher(allAliases());
-  cache.clear();
-}
-const all = () => Object.values(S.lib.albums);
-// Names learned with ✎ Team, plus your my-teams.txt list (which wins).
-const allAliases = () => Object.assign({}, S.aliases, S.myTeams);
-// Your own name for a store (set with ✎ in the Stores list), or its original name.
-const storeName = (s) => S.storeNames[s] || s;
-
-// Everything the Library knows about an item: what it is (the item sorter, categories.js) and,
-// for clothing, the team, season, kit type and extras (teams.js).
-function info(a) {
-  const storeCat = S.storeCats[a.store] || "";
-  const ck = [a.key, a.title, a.team || "", a.category || "", storeCat].join("|");
-  let r = cache.get(ck);
-  if (r) return r;
-  const p = YO_parse(a.title, matcher);
-  const c = YO_categorize(a.title, p, a.category, storeCat);
-  const clothing = YO_CLOTHING.indexOf(c.category) !== -1;
-  const kit = c.sub === "Football Kit";
-  r = Object.assign({}, p, {
-    category: c.category, sub: c.sub, catPath: c.category + (c.sub ? " › " + c.sub : ""), catHow: c.how,
-    clothing, footballKit: kit, catEdited: c.how === "yours"
-  });
-  if (!clothing) Object.assign(r, { team: null, season: null, seasonKey: null, kit: null, extras: [] });
-  else if (!kit) r.kit = null;
-  if (clothing && a.team) Object.assign(r, { team: a.team, edited: true });
-  // Football kits get the "Liverpool 2024/25 Home" style name; everything else a tidied-up title.
-  r.english = r.team || kit ? YO_english(r) : YO_cleanName(a.title);
-  cache.set(ck, r);
-  return r;
-}
 
 // ---------- sidebar ----------
 function teamMatches(team, q) {
@@ -319,6 +242,7 @@ function renderGrid() {
         <div class="src">${esc(storeName(a.store))} · saved ${esc(fmtDate(a.firstSeen))}${p.edited ? ` · <span class="tag">your fix</span>` : ""}</div>
         <div class="row">
           <a href="${esc(a.link)}">Open album ↗</a>
+          ${starButton(a.key)}
           <button data-cat-edit="${esc(a.key)}" title="Change what this item is">🏷</button>
           ${p.clothing ? `<button data-edit="${esc(a.key)}" title="Set the team">✎ Team</button>` : ""}
           <button data-remove="${esc(a.key)}" title="Remove from library">🗑</button>
@@ -328,6 +252,17 @@ function renderGrid() {
   }).join("");
   $(".more").hidden = list.length <= S.shown;
   document.querySelectorAll("img[data-key]").forEach(loadThumb);
+}
+
+// The ☆ on each card: filled in gold when the item is in one of your collections.
+function starButton(key) {
+  const cols = collectionsOf(key);
+  const tip = cols.length ? "In: " + cols.map((c) => c.name).join(", ") + " — click to change" : "Add to a collection (Catalog)";
+  return `<button class="star ${cols.length ? "on" : ""}" data-collect="${esc(key)}" title="${esc(tip)}">${cols.length ? "★" : "☆"}</button>`;
+}
+// After a collection change, just redraw the stars (no need to reload the whole library).
+function refreshStars() {
+  document.querySelectorAll(".star[data-collect]").forEach((b) => { b.outerHTML = starButton(b.dataset.collect); });
 }
 
 // ---------- bulk edit ----------
@@ -426,19 +361,6 @@ async function removeSelected() {
   toast(`Removed ${keys.length} items.`);
 }
 
-// Photos come from the app's saved copies. If one isn't ready yet, keep retrying for a while
-// (the live Yupoo photo can't be shown here, since Yupoo blocks photos outside its own pages).
-function loadThumb(img, attempt) {
-  attempt = attempt || 0;
-  img.onload = () => { img.style.visibility = ""; img.parentElement.classList.remove("waiting"); };
-  img.onerror = () => {
-    img.style.visibility = "hidden";
-    img.parentElement.classList.add("waiting");
-    if (attempt < 12) setTimeout(() => { if (img.isConnected) loadThumb(img, attempt + 1); }, Math.min(2000 + attempt * 1500, 10000));
-  };
-  img.src = "/thumb/" + encodeURIComponent(img.dataset.key.replace(/[^A-Za-z0-9._-]/g, "_")) + (attempt ? "?r=" + attempt : "");
-}
-
 function update() { renderCats(); renderStores(); renderFilters(); renderGrid(); }
 function renderAll() {
   update();
@@ -518,7 +440,6 @@ async function setStoreCategory(store) {
   await refresh();
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
 
 async function exportCsv() {
   const rows = [["Name", "Category", "Subcategory", "Team", "Season", "Kit type", "Extras", "Store", "Original title", "Photos", "Album link", "Saved"]];
@@ -562,7 +483,6 @@ function openLink(text) {
 
 // ---------- events ----------
 document.addEventListener("click", (e) => {
-  if (e.target.closest(".toast-act")) { const f = toastAction; $(".toast").classList.remove("show", "act"); toastAction = null; if (f) f(); return; }
   // Select mode: clicking a card ticks it instead of opening it.
   const card = selecting && e.target.closest(".card[data-card]");
   if (card) { e.preventDefault(); togglePick(card, e.shiftKey); return; }
@@ -571,6 +491,7 @@ document.addEventListener("click", (e) => {
   if (sb) {
     const act = sb.dataset.sel;
     if (sb.classList.contains("selbtn")) setSelecting(!selecting);
+    else if (act === "collect") openCollectionPicker(sb, [...sel], refreshStars);
     else if (sb.classList.contains("mv-btn")) {
       mvOpen = !mvOpen;
       $(".mv input").value = "";
@@ -591,7 +512,10 @@ document.addEventListener("click", (e) => {
   if (openDD && !e.target.closest(".dd")) { openDD = ""; renderFilters(); }
   const b = e.target.closest("button, .item");
   if (!b) return;
-  if (b.dataset.renameStore !== undefined) renameStore(b.dataset.renameStore);
+  if (b.dataset.collect) openCollectionPicker(b, [b.dataset.collect], refreshStars);
+  else if (b.dataset.act === "catalog") openCatalog(false);
+  else if (b.dataset.act === "catalog-win") openCatalog(true);
+  else if (b.dataset.renameStore !== undefined) renameStore(b.dataset.renameStore);
   else if (b.dataset.storeCat !== undefined) setStoreCategory(b.dataset.storeCat);
   else if (b.dataset.catEdit) setItemCategory(b.dataset.catEdit);
   else if (b.dataset.chev !== undefined) { setCatOpen(b.dataset.chev, !openCats.has(b.dataset.chev)); update(); }
@@ -646,5 +570,12 @@ window.addEventListener("kit-crawl", (e) => {
   const { status, previous } = e.detail;
   if (previous && previous.running && !status.running && status.new) refresh();
 });
+
+// The Catalog (maybe in its own window) changed something: keep this page in step.
+if (channel) channel.onmessage = async (e) => {
+  const what = e.data && e.data.what;
+  if (what === "collections") { await loadCollections(); refreshStars(); }
+  else if (what === "library") await refresh();
+};
 
 load().then(renderAll).catch((e) => toast("Couldn't load your library: " + e.message));
