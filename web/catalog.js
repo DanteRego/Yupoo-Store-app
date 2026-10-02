@@ -287,5 +287,31 @@ if (channel) channel.onmessage = async (e) => {
   render();
 };
 
+// Picking up where you left off: coming back from an album returns to the same search, sort and scroll.
+function saveView() {
+  try { sessionStorage.setItem("catalogView", JSON.stringify({ colId: S.colId, q: S.q, sort: S.sort, scroll: $("main").scrollTop })); } catch (e) {}
+}
+function restoreView() {
+  let v = null;
+  try { v = JSON.parse(sessionStorage.getItem("catalogView") || "null"); } catch (e) {}
+  if (!v || v.colId !== S.colId) return 0;
+  S.q = v.q || ""; S.sort = v.sort || "added";
+  $(".q").value = S.q; $(".sort").value = S.sort;
+  return v.scroll || 0;
+}
+let viewTimer = null;
+$("main").addEventListener("scroll", () => {
+  $(".topbar").classList.toggle("stuck", $("main").scrollTop > 4);
+  clearTimeout(viewTimer);
+  viewTimer = setTimeout(saveView, 250);
+});
+window.addEventListener("pagehide", saveView);
+document.addEventListener("visibilitychange", () => { if (document.hidden) saveView(); });
+
 if (isOwnWindow) $('[data-act="newwin"]').hidden = true;
-load().then(render).catch((e) => toast("Couldn't load your Catalog: " + e.message));
+load().then(() => {
+  chooseStartingCollection();
+  const scroll = restoreView();
+  render();
+  $("main").scrollTop = scroll;
+}).catch((e) => toast("Couldn't load your Catalog: " + e.message));

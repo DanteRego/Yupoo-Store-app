@@ -32,6 +32,7 @@
       <div class="list stores"></div>
     </aside>
     <main>
+      <div class="topbar">
       <div class="filters">
         <input class="q" type="search" placeholder="Search items — name, team, season, store or Chinese title">
         <div class="dds"></div>
@@ -44,9 +45,13 @@
         <button class="clear" hidden>✕ Clear filters</button>
         <button class="selbtn" title="Select several items to move them to a category at once">☑ Select</button>
       </div>
-      <div class="summary"></div>
+      <div class="sumrow"><span class="summary"></span><span class="grow"></span>
+        <nav class="pager top" aria-label="Pages"></nav>
+        <select class="perpage" title="Items per page"><option value="60">60 per page</option><option value="120">120 per page</option><option value="240">240 per page</option></select>
+      </div>
+      </div>
       <div class="grid"></div>
-      <button class="more" hidden>Show more</button>
+      <nav class="pager bottom" aria-label="Pages"></nav>
       <div class="selbar" hidden>
         <span class="selcount"></span>
         <button data-sel="page"></button>

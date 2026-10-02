@@ -138,3 +138,18 @@ header .navbtn.win { padding: 8px 10px; }
 .newcol:hover { color: var(--ink); border-color: var(--muted); }
 .gone { opacity: .6; }
 .gone .img::after { content: "No longer in your library"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+
+/* ---------- Sticky filter bar + numbered pages ---------- */
+.topbar { position: sticky; top: -16px; z-index: 15; background: var(--bg); margin: -16px -18px 12px; padding: 14px 18px 8px; transition: box-shadow .15s; }
+.topbar.stuck { box-shadow: 0 6px 14px -8px rgba(0,0,0,.35); border-bottom: 1px solid var(--line); }
+.sumrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; min-height: 30px; }
+.sumrow .summary { margin: 0; }
+.grow { flex: 1; }
+.pager { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.pager button { min-width: 34px; padding: 6px 9px; font-variant-numeric: tabular-nums; }
+.pager button.on { background: var(--green); color: #fff; font-weight: 600; cursor: default; }
+.pager button:disabled { opacity: .4; cursor: default; }
+.pager .gap { color: var(--muted); padding: 0 4px; }
+.pager.top button { min-width: 28px; padding: 4px 8px; font-size: 12px; }
+.pager.bottom { justify-content: center; margin: 24px 0 4px; }
+.perpage { padding: 4px 8px; font-size: 12px; }

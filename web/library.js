@@ -1,9 +1,11 @@
 // Yupoo Library app — the library page: every item you've saved, from every store, in one place.
 // Shared pieces (talking to the app, item names, photos, collections) are in shared.js.
-const PAGE_SIZE = 120;
+const PER_PAGE_CHOICES = [60, 120, 240];
+const savedPerPage = (() => { try { return +localStorage.getItem("perPage"); } catch (e) { return 0; } })();
 
 // The Library's own filters, added to the shared S.
-Object.assign(S, { cat: "", team: "", store: "", kit: "", season: "", extra: "", q: "", sort: "team", shown: PAGE_SIZE });
+Object.assign(S, { cat: "", team: "", store: "", kit: "", season: "", extra: "", q: "", sort: "team",
+  page: 1, perPage: PER_PAGE_CHOICES.indexOf(savedPerPage) !== -1 ? savedPerPage : 120 });
 // The dropdown filters above the items. "f" is the name of the filter in S.
 const FILTERS = [
   { f: "cat", label: "Category", any: "Any category" },
@@ -162,7 +164,7 @@ function toggleDD(f) {
 }
 
 function pick(f, v) {
-  S[f] = v; openDD = ""; S.shown = PAGE_SIZE;
+  S[f] = v; openDD = ""; S.page = 1;
   if (f === "cat" && v) setCatOpen(v.split(" › ")[0], true);
   update();
   $("main").scrollTop = 0;
@@ -204,7 +206,11 @@ function filtered() {
 
 function renderGrid() {
   const list = filtered(), total = all().length;
-  shownKeys = list.slice(0, S.shown).map((a) => a.key);
+  // Numbered pages: keep the page number inside the range (e.g. after a filter shrinks the list).
+  const pages = Math.max(1, Math.ceil(list.length / S.perPage));
+  S.page = Math.min(Math.max(1, S.page), pages);
+  const start = (S.page - 1) * S.perPage, pageItems = list.slice(start, start + S.perPage);
+  shownKeys = pageItems.map((a) => a.key);
   matchingKeys = list.map((a) => a.key);
   renderSelBar();
   $(".count").textContent = total ? `${total} items · ${new Set(all().map((a) => a.store)).size} stores` : "";
@@ -217,17 +223,17 @@ function renderGrid() {
         <li>Press <b>Save whole store</b> in the green bar to grab a supplier's entire catalog.</li>
         <li>Press <b>Library</b> in the green bar to come back here.</li>
       </ol></div>`;
-    $(".more").hidden = true;
+    renderPager(0, 0);
     return;
   }
-  $(".summary").textContent = `Showing ${Math.min(list.length, S.shown)} of ${list.length} items` +
-    (list.length !== total ? ` (${total} saved in total)` : "");
+  $(".summary").textContent = (list.length > S.perPage ? `Showing ${start + 1}–${start + pageItems.length} of ${list.length.toLocaleString()} items` : `${list.length.toLocaleString()} items`) +
+    (list.length !== total ? ` (${total.toLocaleString()} saved in total)` : "");
   if (!list.length) {
     $(".grid").innerHTML = `<div class="empty" style="grid-column:1/-1">No items match these filters.</div>`;
-    $(".more").hidden = true;
+    renderPager(0, 0);
     return;
   }
-  $(".grid").innerHTML = list.slice(0, S.shown).map((a, i) => {
+  $(".grid").innerHTML = pageItems.map((a, i) => {
     const p = info(a);
     return `<div class="card ${sel.has(a.key) ? "picked" : ""}" data-card="${esc(a.key)}" data-i="${i}">
       <span class="tick" aria-hidden="true">✓</span>
@@ -250,8 +256,51 @@ function renderGrid() {
       </div>
     </div>`;
   }).join("");
-  $(".more").hidden = list.length <= S.shown;
+  renderPager(S.page, pages);
   document.querySelectorAll("img[data-key]").forEach(loadThumb);
+}
+
+// ---------- numbered pages ----------
+// "‹ 1 … 4 5 [6] 7 8 … 89 ›" — shown in the sticky bar at the top and again under the items.
+function renderPager(page, pages) {
+  let html = "";
+  if (pages > 1) {
+    const nums = new Set([1, pages, page - 2, page - 1, page, page + 1, page + 2].filter((n) => n >= 1 && n <= pages));
+    const list = [...nums].sort((a, b) => a - b);
+    html += `<button data-page="${page - 1}" ${page === 1 ? "disabled" : ""} title="Previous page">‹</button>`;
+    list.forEach((n, i) => {
+      if (i && n - list[i - 1] > 1) html += `<span class="gap">…</span>`;
+      html += `<button data-page="${n}" class="${n === page ? "on" : ""}">${n}</button>`;
+    });
+    html += `<button data-page="${page + 1}" ${page === pages ? "disabled" : ""} title="Next page">›</button>`;
+  }
+  document.querySelectorAll(".pager").forEach((p) => { p.innerHTML = html; });
+  $(".perpage").hidden = !pages;
+  $(".perpage").value = String(S.perPage);
+}
+function goToPage(n) {
+  S.page = n;
+  renderGrid();
+  $("main").scrollTop = 0;
+}
+
+// ---------- picking up where you left off ----------
+// When you open an album (or a store) and come back, the Library returns to the same filters,
+// search, page and scroll position. Kept for this app session only.
+const VIEW_KEYS = ["cat", "team", "store", "kit", "season", "extra", "q", "sort", "page"];
+function saveView() {
+  const v = { scroll: $("main").scrollTop };
+  VIEW_KEYS.forEach((k) => { v[k] = S[k]; });
+  try { sessionStorage.setItem("libraryView", JSON.stringify(v)); } catch (e) {}
+}
+function restoreView() {
+  let v = null;
+  try { v = JSON.parse(sessionStorage.getItem("libraryView") || "null"); } catch (e) {}
+  if (!v) return 0;
+  VIEW_KEYS.forEach((k) => { if (v[k] !== undefined) S[k] = v[k]; });
+  $(".q").value = S.q;
+  $(".sort").value = S.sort;
+  return v.scroll || 0;
 }
 
 // The ☆ on each card: filled in gold when the item is in one of your collections.
@@ -512,7 +561,8 @@ document.addEventListener("click", (e) => {
   if (openDD && !e.target.closest(".dd")) { openDD = ""; renderFilters(); }
   const b = e.target.closest("button, .item");
   if (!b) return;
-  if (b.dataset.collect) openCollectionPicker(b, [b.dataset.collect], refreshStars);
+  if (b.dataset.page) goToPage(+b.dataset.page);
+  else if (b.dataset.collect) openCollectionPicker(b, [b.dataset.collect], refreshStars);
   else if (b.dataset.act === "catalog") openCatalog(false);
   else if (b.dataset.act === "catalog-win") openCatalog(true);
   else if (b.dataset.renameStore !== undefined) renameStore(b.dataset.renameStore);
@@ -520,25 +570,24 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.catEdit) setItemCategory(b.dataset.catEdit);
   else if (b.dataset.chev !== undefined) { setCatOpen(b.dataset.chev, !openCats.has(b.dataset.chev)); update(); }
   else if (b.dataset.cat !== undefined) {
-    S.cat = b.dataset.cat; S.shown = PAGE_SIZE;
+    S.cat = b.dataset.cat; S.page = 1;
     if (S.cat) setCatOpen(S.cat.split(" › ")[0], true);
     update(); $("main").scrollTop = 0;
   }
   else if (b.dataset.ddToggle) toggleDD(b.dataset.ddToggle);
   else if (b.dataset.pick !== undefined) pick(b.closest("[data-dd]").dataset.dd, b.dataset.pick);
-  else if (b.dataset.store !== undefined) { S.store = b.dataset.store; S.shown = PAGE_SIZE; update(); $("main").scrollTop = 0; }
+  else if (b.dataset.store !== undefined) { S.store = b.dataset.store; S.page = 1; update(); $("main").scrollTop = 0; }
   else if (b.classList.contains("clear")) {
     FILTERS.forEach(({ f }) => { S[f] = ""; });
-    S.q = ""; $(".q").value = ""; S.shown = PAGE_SIZE; update();
+    S.q = ""; $(".q").value = ""; S.page = 1; update();
   }
   else if (b.dataset.edit) editTeam(b.dataset.edit);
   else if (b.dataset.remove) removeKit(b.dataset.remove);
   else if (b.dataset.act === "csv") exportCsv();
   else if (b.dataset.act === "backup") backup();
-  else if (b.classList.contains("more")) { S.shown += PAGE_SIZE; renderGrid(); }
 });
 $("form.go").addEventListener("submit", (e) => { e.preventDefault(); openLink($(".link").value); });
-$(".q").addEventListener("input", (e) => { S.q = e.target.value; S.shown = PAGE_SIZE; renderFilters(); renderGrid(); });
+$(".q").addEventListener("input", (e) => { S.q = e.target.value; S.page = 1; renderFilters(); renderGrid(); });
 // "Move to…" search box: typing narrows the list, Enter picks the top match, Esc closes it.
 $(".mv input").addEventListener("input", renderMoveOptions);
 $(".mv input").addEventListener("keydown", (e) => {
@@ -558,7 +607,26 @@ $(".dds").addEventListener("keydown", (e) => {
     if (first) pick(openDD, first.dataset.pick);
   }
 });
-$(".sort").addEventListener("change", (e) => { S.sort = e.target.value; renderGrid(); });
+$(".sort").addEventListener("change", (e) => { S.sort = e.target.value; S.page = 1; renderGrid(); });
+$(".perpage").addEventListener("change", (e) => {
+  // Keep roughly the same items on screen when changing how many show per page.
+  const first = (S.page - 1) * S.perPage;
+  S.perPage = +e.target.value;
+  S.page = Math.floor(first / S.perPage) + 1;
+  try { localStorage.setItem("perPage", String(S.perPage)); } catch (err) {}
+  renderGrid();
+  $("main").scrollTop = 0;
+});
+// The filter bar sticks to the top while you scroll; it gets a shadow once the items slide under it.
+let viewTimer = null;
+$("main").addEventListener("scroll", () => {
+  $(".topbar").classList.toggle("stuck", $("main").scrollTop > 4);
+  clearTimeout(viewTimer);
+  viewTimer = setTimeout(saveView, 250);
+});
+// Remember where you are when leaving the page (opening an album, a store, or the Catalog).
+window.addEventListener("pagehide", saveView);
+document.addEventListener("visibilitychange", () => { if (document.hidden) saveView(); });
 $(".autosave").addEventListener("change", (e) => {
   S.settings.autoSave = e.target.checked;
   call("POST", "/api/settings", S.settings);
@@ -578,4 +646,9 @@ if (channel) channel.onmessage = async (e) => {
   else if (what === "library") await refresh();
 };
 
-load().then(renderAll).catch((e) => toast("Couldn't load your library: " + e.message));
+// Start up: load everything, then go back to where you were (if you were here before).
+load().then(() => {
+  const scroll = restoreView();
+  renderAll();
+  $("main").scrollTop = scroll;
+}).catch((e) => toast("Couldn't load your library: " + e.message));
