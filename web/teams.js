@@ -7,7 +7,7 @@ var YO_TEAMS = {
   "Manchester United": ["曼联", "曼彻斯特联", "曼聯", "Man Utd", "Man United", "MUFC"],
   "Manchester City": ["曼城", "曼彻斯特城", "Man City"],
   "Liverpool": ["利物浦", "LW", "LWP"],
-  "Arsenal": ["阿森纳", "阿仙奴", "兵工厂"],
+  "Arsenal": ["阿森纳", "阿仙奴", "兵工厂", "啊森纳"],
   "Chelsea": ["切尔西", "车路士"],
   "Tottenham": ["热刺", "托特纳姆", "Spurs"],
   "West Ham": ["西汉姆联", "西汉姆", "韦斯特汉姆"],
@@ -31,11 +31,11 @@ var YO_TEAMS = {
 
   // ---------- Spain ----------
   "Barcelona": ["巴塞罗那", "巴萨", "巴塞", "巴赛", "Barca", "FC Barcelona"],
-  "Real Madrid": ["皇家马德里", "皇马", "银河战舰"],
+  "Real Madrid": ["皇家马德里", "皇马", "银河战舰", "王马"],
   "Atletico Madrid": ["马德里竞技", "马竞", "Atletico"],
   "Valencia": ["瓦伦西亚"],
   "Sevilla": ["塞维利亚"],
-  "Real Betis": ["皇家贝蒂斯", "贝蒂斯", "Betis"],
+  "Real Betis": ["皇家贝蒂斯", "贝蒂斯", "Betis", "贝帝斯"],
   "Athletic Bilbao": ["毕尔巴鄂竞技", "毕尔巴鄂"],
   "Villarreal": ["比利亚雷亚尔", "黄色潜水艇"],
   "Deportivo La Coruna": ["拉科鲁尼亚", "科鲁尼亚", "拉科", "Deportivo"],
@@ -61,6 +61,7 @@ var YO_TEAMS = {
   "Schalke 04": ["沙尔克04", "沙尔克", "Schalke"],
   "Hamburg": ["汉堡"],
   "Werder Bremen": ["云达不莱梅", "不莱梅"],
+  "RB Leipzig": ["莱比锡红牛", "莱比锡", "Leipzig"],
 
   // ---------- France ----------
   "Paris Saint-Germain": ["巴黎圣日耳曼", "大巴黎", "巴黎", "PSG"],
@@ -70,7 +71,8 @@ var YO_TEAMS = {
   "Lille": ["里尔"],
 
   // ---------- Rest of Europe ----------
-  "Ajax": ["阿贾克斯"],
+  "Ajax": ["阿贾克斯", "贾克斯"],
+  "FC Copenhagen": ["哥本哈根"],
   "PSV": ["埃因霍温"],
   "Feyenoord": ["费耶诺德"],
   "Benfica": ["本菲卡"],
@@ -82,18 +84,22 @@ var YO_TEAMS = {
   // ---------- Americas / Asia ----------
   "Boca Juniors": ["博卡青年", "博卡"],
   "River Plate": ["河床"],
-  "Santos": ["桑托斯"],
+  "Santos": ["桑托斯", "桑拖斯"],
+  "Atletico Mineiro": ["竞技米内罗", "米内罗"],
+  "Millonarios": ["百万富翁"],
+  "Tigres UANL": ["老虎"],
+  "New York Red Bulls": ["纽约红牛"],
   "Sao Paulo": ["圣保罗"],
   "Club America": ["墨西哥美洲", "美洲"],
   "Colo-Colo": ["科洛科洛", "科洛"],
   "Universidad de Chile": ["智利大学"],
-  "Flamengo": ["弗拉门戈"],
+  "Flamengo": ["弗拉门戈", "佛拉门戈"],
   "Corinthians": ["科林蒂安"],
   "Palmeiras": ["帕尔梅拉斯"],
   "Inter Miami": ["迈阿密国际", "迈阿密"],
   "LA Galaxy": ["洛杉矶银河", "银河"],
-  "Al Nassr": ["利雅得胜利"],
-  "Al Hilal": ["利雅得新月"],
+  "Al Nassr": ["利雅得胜利", "利雅得"],
+  "Al Hilal": ["利雅得新月", "新月"],
 
   // ---------- National teams ----------
   "Brazil": ["巴西"],
@@ -138,7 +144,10 @@ var YO_TEAMS = {
   "Saudi Arabia": ["沙特"],
   "Nigeria": ["尼日利亚"],
   "Cameroon": ["喀麦隆"],
-  "Senegal": ["塞内加尔"],
+  "Senegal": ["塞内加尔", "塞纳河加尔"],
+  "Algeria": ["阿尔及利亚"],
+  "Ivory Coast": ["科特迪瓦"],
+  "DR Congo": ["刚果", "钢果"],
   "Morocco": ["摩洛哥"],
   "Ghana": ["加纳"],
   "Jamaica": ["牙买加"],
@@ -175,6 +184,23 @@ var YO_EXTRAS = [
 ];
 
 var YO_SEASON_RE = /((?:18|19|20)\d{2})\s*(?:[\/\-–~]\s*(\d{4}|\d{2}))?\s*年?/;
+
+// Short seasons some suppliers write: "2526" or "25/26" = 2025/26. Only back-to-back years count,
+// so product codes like "9006" are left alone.
+var YO_SHORT_SEASON_RE = /(^|[^\d])(\d{2})\s*([\/\-]?)\s*(\d{2})(?!\d)/g;
+function yoShortSeason(t) {
+  YO_SHORT_SEASON_RE.lastIndex = 0;
+  var m;
+  while ((m = YO_SHORT_SEASON_RE.exec(t))) {
+    var a = parseInt(m[2], 10), b = parseInt(m[4], 10);
+    if ((a + 1) % 100 === b) {
+      var full = (a < 60 ? 2000 : 1900) + a;
+      return { season: full + "/" + m[4], key: full, text: m[0].slice(m[1].length) };
+    }
+    YO_SHORT_SEASON_RE.lastIndex = m.index + 1;
+  }
+  return null;
+}
 
 function yoIsAscii(s) { return /^[\x00-\x7f]+$/.test(s); }
 function yoBoundary(s, i, len) {
@@ -243,6 +269,13 @@ function YO_parse(title, matcher) {
     r.season = y2 ? sm[1] + "/" + y2 : sm[1];
     r.seasonKey = parseInt(sm[1], 10);
     rest = t.replace(sm[0], " ");
+  } else {
+    var short = yoShortSeason(t);
+    if (short) {
+      r.season = short.season;
+      r.seasonKey = short.key;
+      rest = t.replace(short.text, " ");
+    }
   }
   rest = yoTake(rest, YO_EXTRAS_SORTED, r.extras, true);
   var tm = YO_findTeam(rest, matcher);

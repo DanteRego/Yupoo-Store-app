@@ -502,7 +502,8 @@ async function setItemCategory(key) {
   const a = S.lib.albums[key]; if (!a) return;
   const p = info(a);
   const how = { word: "from a word in its title", store: "from the store's 🏷 setting", sizes: "from the shoe sizes in its title",
-    team: "because a team was found in its title", none: "nothing in its title said", yours: "your pick" }[p.catHow];
+    team: "because a team was found in its title", "clothing sizes": "from the clothing sizes in its title",
+    none: "nothing in its title said", yours: "your pick" }[p.catHow];
   const pick = chooseCategory(`What is this item?\n\n${a.title}\n\nRight now: ${p.catPath} (${how})`, a.category || p.catPath, "to let the sorter decide");
   if (pick === null) return;
   await call("POST", "/api/category", { key, category: pick });

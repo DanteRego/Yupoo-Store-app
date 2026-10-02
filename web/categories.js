@@ -7,18 +7,22 @@
 // so put very specific words (like 足球鞋 = football boots) above general ones (like 鞋 = shoe).
 
 var YO_CATEGORIES = [
-  { name: "Shirts", subs: ["Football Kit", "T-Shirt", "Polo", "Sweater", "Hoodie", "Jacket", "Other Shirts"] },
+  { name: "Shirts", subs: ["Football Kit", "Fashion Jersey", "T-Shirt", "Polo", "Sweater", "Hoodie", "Jacket", "Blank Teamwear", "Other Shirts"] },
   { name: "Bottoms", subs: ["Shorts", "Pants", "Other Bottoms"] },
   { name: "Shoes", subs: ["Football Boots", "Running Shoes", "Basketball Shoes", "Training Shoes", "Sneakers",
     "Hiking & Trail", "Slides & Sandals", "Boots", "Other Shoes"] },
   { name: "Bags & Accessories", subs: ["Bags", "Hats", "Socks", "Other Accessories"] },
-  { name: "Other", subs: [] }
+  { name: "Other", subs: ["Size Charts"] }
 ];
 
 // Categories where a football team makes sense (team, season, kit type and extras are only shown for these).
 var YO_CLOTHING = ["Shirts", "Bottoms"];
 
 var YO_CATEGORY_WORDS = [
+  // ---- Size charts (pictures of a size table, not something to buy)
+  ["尺寸表", "Other", "Size Charts"], ["尺码表", "Other", "Size Charts"], ["尺码对照", "Other", "Size Charts"],
+  ["size chart", "Other", "Size Charts"],
+
   // ---- Shoes: football boots first, because their titles often also say 针织 (knit) etc.
   ["足球鞋", "Shoes", "Football Boots"], ["球鞋足球", "Shoes", "Football Boots"], ["钉鞋", "Shoes", "Football Boots"],
   ["碎钉", "Shoes", "Football Boots"], ["草钉", "Shoes", "Football Boots"], ["长钉", "Shoes", "Football Boots"],
@@ -96,11 +100,26 @@ var YO_CATEGORY_WORDS = [
   ["jumper", "Shirts", "Sweater"], ["sweatshirt", "Shirts", "Sweater"],
   ["羽绒", "Shirts", "Jacket"], ["外套", "Shirts", "Jacket"], ["夹克", "Shirts", "Jacket"], ["风衣", "Shirts", "Jacket"],
   ["棉服", "Shirts", "Jacket"], ["jacket", "Shirts", "Jacket"], ["windbreaker", "Shirts", "Jacket"], ["coat", "Shirts", "Jacket"],
-  ["POLO", "Shirts", "Polo"], ["翻领", "Shirts", "Polo"],
+  ["POLO", "Shirts", "Polo"], ["P O L O", "Shirts", "Polo"], ["PO", "Shirts", "Polo"], ["翻领", "Shirts", "Polo"],
+  ["反领", "Shirts", "Polo"],
+  // Casual shirts (休闲 = casual, 圆领 = crew neck). Above the fashion-jersey words, so a casual lotus tee is a T-shirt.
+  ["圆领", "Shirts", "T-Shirt"], ["休闲", "Shirts", "T-Shirt"],
+  // Blank teamwear for custom printing (空白版 = blank version, 卡尔美 = Kelme, 涤盖涤 = a teamwear fabric).
+  ["空白版", "Shirts", "Blank Teamwear"], ["空白", "Shirts", "Blank Teamwear"], ["光板", "Shirts", "Blank Teamwear"],
+  ["卡尔美", "Shirts", "Blank Teamwear"], ["kelme", "Shirts", "Blank Teamwear"], ["涤盖涤", "Shirts", "Blank Teamwear"],
+  ["joma", "Shirts", "Blank Teamwear"], ["荷马", "Shirts", "Blank Teamwear"],
+  // Fashion / lifestyle jerseys (Adidas lotus 荷花 jacquard 提花, the Oasis 绿洲 collab, city editions).
+  ["荷花", "Shirts", "Fashion Jersey"], ["提花", "Shirts", "Fashion Jersey"], ["绿洲", "Shirts", "Fashion Jersey"],
+  ["oasis", "Shirts", "Fashion Jersey"], ["ADoasis", "Shirts", "Fashion Jersey"], ["首尔限量", "Shirts", "Fashion Jersey"],
+  ["城市限量", "Shirts", "Fashion Jersey"],
   ["球裤", "Bottoms", "Shorts"], ["短裤", "Bottoms", "Shorts"], ["shorts", "Bottoms", "Shorts"],
   ["长裤", "Bottoms", "Pants"], ["卫裤", "Bottoms", "Pants"], ["运动裤", "Bottoms", "Pants"], ["pants", "Bottoms", "Pants"],
   ["trousers", "Bottoms", "Pants"], ["joggers", "Bottoms", "Pants"], ["裤", "Bottoms", "Other Bottoms"],
   ["球衣", "Shirts", "Football Kit"], ["足球服", "Shirts", "Football Kit"], ["jersey", "Shirts", "Football Kit"],
+  ["训练服", "Shirts", "Football Kit"], ["主场", "Shirts", "Football Kit"], ["客场", "Shirts", "Football Kit"],
+  ["二客", "Shirts", "Football Kit"], ["三客", "Shirts", "Football Kit"], ["特别版", "Shirts", "Football Kit"],
+  ["纪念版", "Shirts", "Football Kit"], ["C罗", "Shirts", "Football Kit"], ["梅西", "Shirts", "Football Kit"],
+  ["内马尔", "Shirts", "Football Kit"], ["足球", "Shirts", "Football Kit"],
   ["T恤", "Shirts", "T-Shirt"], ["t-shirt", "Shirts", "T-Shirt"], ["tee", "Shirts", "T-Shirt"],
 
   // ---- Brands that (in these stores) mostly mean shoes. They come after the clothing words,
@@ -120,6 +139,9 @@ var YO_CATEGORY_WORDS = [
 // Shoe sizes like "36-45", "39~46", "尺码：36 37 38" or "38 39 40 41".
 var YO_SHOE_SIZES = /(?:^|[^\d.])(3[4-9]|4[0-9])(?:\.5)?\s*[-–~至到]\s*(3[5-9]|4[0-9])|(?:尺码|码数|size)\s*[:：]?\s*(3[4-9]|4[0-9])\b|(?:(?:^|\D)(?:3[4-9]|4[0-9])(?:\.5)?\s+){3}/i;
 
+// Clothing sizes like "S-4XL", "S到4XL" or "s-3xl".
+var YO_CLOTHING_SIZES = /(?:^|[^a-z])s\s*(?:-|–|~|到|至)\s*\d?x*l(?![a-z])/i;
+
 // What an item is. "fixed" is the item's own choice (🏷 on the card) and "storeDefault" the store's (🏷 in Stores);
 // both look like "Shoes › Sneakers" or just "Shoes". "parsed" is the YO_parse result for the title.
 function YO_categorize(title, parsed, fixed, storeDefault) {
@@ -129,13 +151,18 @@ function YO_categorize(title, parsed, fixed, storeDefault) {
   };
   if (fixed) return split(fixed, "yours");
   var lower = String(title || "").toLowerCase();
+  // Shoe sizes in the title (36 37 38…) mean it's a shoe, so clothing words like 休闲 (casual) are skipped.
+  var shoeSized = YO_SHOE_SIZES.test(title || "");
   for (var k = 0; k < YO_CATEGORY_WORDS.length; k++) {
     var w = YO_CATEGORY_WORDS[k];
-    if (yoFind(lower, w[0]) !== -1) return { category: w[1], sub: w[2], how: "word", word: w[0] };
+    if (yoFind(lower, w[0]) === -1) continue;
+    if (shoeSized && YO_CLOTHING.indexOf(w[1]) !== -1) continue;
+    return { category: w[1], sub: w[2], how: "word", word: w[0] };
   }
   if (storeDefault) return split(storeDefault, "store");
   if (YO_SHOE_SIZES.test(title || "")) return { category: "Shoes", sub: "Other Shoes", how: "sizes" };
   if (parsed && (parsed.team || (parsed.season && parsed.kit))) return { category: "Shirts", sub: "Football Kit", how: "team" };
+  if (YO_CLOTHING_SIZES.test(title || "")) return { category: "Shirts", sub: "Other Shirts", how: "clothing sizes" };
   return { category: "Other", sub: "", how: "none" };
 }
 
