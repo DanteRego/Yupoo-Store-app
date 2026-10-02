@@ -153,3 +153,9 @@ header .navbtn.win { padding: 8px 10px; }
 .pager.top button { min-width: 28px; padding: 4px 8px; font-size: 12px; }
 .pager.bottom { justify-content: center; margin: 24px 0 4px; }
 .perpage { padding: 4px 8px; font-size: 12px; }
+
+/* ---------- Brands ---------- */
+.catline .brand { color: var(--ink); opacity: .75; }
+.grouphead { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px; margin: 10px 0 -4px; padding-bottom: 6px; border-bottom: 2px solid var(--line); font-size: 17px; font-weight: 700; }
+.grouphead:first-child { margin-top: 0; }
+.grouphead .c { font-size: 12px; font-weight: 400; color: var(--muted); }

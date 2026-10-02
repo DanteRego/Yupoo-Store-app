@@ -9,6 +9,7 @@ Object.assign(S, { cat: "", team: "", store: "", kit: "", season: "", extra: "",
 // The dropdown filters above the items. "f" is the name of the filter in S.
 const FILTERS = [
   { f: "cat", label: "Category", any: "Any category" },
+  { f: "brand", label: "Brand", any: "Any brand" },
   { f: "team", label: "Team", any: "Any team" },
   { f: "season", label: "Season", any: "Any season" },
   { f: "kit", label: "Kit type", any: "Any kit type" },
@@ -89,6 +90,7 @@ function renderStores() {
 function vals(a, f) {
   const p = info(a);
   if (f === "cat") return p.sub ? [p.category, p.catPath] : [p.category];
+  if (f === "brand") return [p.brand || "—"];
   if (f === "team") return [p.team || (p.footballKit ? "__unsorted" : "—")];
   if (f === "season") return [p.season || "—"];
   if (f === "kit") return [p.kit || "—"];
@@ -97,7 +99,7 @@ function vals(a, f) {
 }
 function optionLabel(f, v) {
   if (v === "__unsorted") return "⚠ Kits with no team";
-  if (v === "—") return { team: "No team", season: "No season", kit: "No kit type", extra: "No extras" }[f];
+  if (v === "—") return { brand: "No brand in title", team: "No team", season: "No season", kit: "No kit type", extra: "No extras" }[f];
   return f === "store" ? storeName(v) : v;
 }
 const KIT_ORDER = ["Home", "Away", "Second Away", "Third", "Goalkeeper", "Training", "Pre-Match"];
@@ -179,7 +181,7 @@ function passes(a, skip) {
   const words = S.q.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length) {
     const p = info(a);
-    const hay = (p.english + " " + p.catPath + " " + a.title + " " + a.store + " " + storeName(a.store)).toLowerCase();
+    const hay = (p.english + " " + p.catPath + " " + p.brand + " " + a.title + " " + a.store + " " + storeName(a.store)).toLowerCase();
     if (!words.every((w) => hay.includes(w))) return false;
   }
   return true;
@@ -195,8 +197,13 @@ function filtered() {
   };
   const byCat = (a, b) => { const pa = info(a), pb = info(b); return YO_categoryRank(pa.category, pa.sub) - YO_categoryRank(pb.category, pb.sub); };
   const byName = (a, b) => info(a).english.localeCompare(info(b).english);
+  // Brand A–Z, items whose title names no brand last.
+  const byBrand = (a, b) => { const x = info(a).brand, y = info(b).brand; return !x !== !y ? (x ? -1 : 1) : (x || "").localeCompare(y || ""); };
+  // Clothing groups by team; everything else (shoes, bags…) by brand.
+  const byTeamOrBrand = (a, b) => (info(a).clothing && info(b).clothing ? byTeam(a, b) : byBrand(a, b));
   const cmp = {
-    team: (a, b) => byCat(a, b) || byTeam(a, b) || (sk(b) || 0) - (sk(a) || 0) || byName(a, b),
+    team: (a, b) => byCat(a, b) || byTeamOrBrand(a, b) || (sk(b) || 0) - (sk(a) || 0) || byName(a, b),
+    brand: (a, b) => byBrand(a, b) || byCat(a, b) || byName(a, b),
     new: (a, b) => (sk(b) || 0) - (sk(a) || 0),
     old: (a, b) => (sk(a) || 9999) - (sk(b) || 9999),
     saved: (a, b) => (b.firstSeen || 0) - (a.firstSeen || 0)
@@ -233,16 +240,26 @@ function renderGrid() {
     renderPager(0, 0);
     return;
   }
+  // Sorted by brand: a heading wherever a new brand starts ("Nike · 4,581 items").
+  const brandCounts = new Map();
+  if (S.sort === "brand") list.forEach((a) => { const b = info(a).brand || ""; brandCounts.set(b, (brandCounts.get(b) || 0) + 1); });
+  const heading = (a, i) => {
+    if (S.sort !== "brand") return "";
+    const b = info(a).brand || "";
+    if (i > 0 && (info(pageItems[i - 1]).brand || "") === b) return "";
+    const n = brandCounts.get(b) || 0;
+    return `<div class="grouphead"><span>${esc(b || "No brand in title")}</span><span class="c">${n.toLocaleString()} item${n === 1 ? "" : "s"}${i === 0 && start > 0 && (info(list[start - 1]).brand || "") === b ? " · continued" : ""}</span></div>`;
+  };
   $(".grid").innerHTML = pageItems.map((a, i) => {
     const p = info(a);
-    return `<div class="card ${sel.has(a.key) ? "picked" : ""}" data-card="${esc(a.key)}" data-i="${i}">
+    return heading(a, i) + `<div class="card ${sel.has(a.key) ? "picked" : ""}" data-card="${esc(a.key)}" data-i="${i}">
       <span class="tick" aria-hidden="true">✓</span>
       <a class="img" href="${esc(a.link)}">
         <img data-key="${esc(a.key)}" data-cover="${esc(a.cover || "")}" alt="" loading="lazy">
         ${a.count ? `<span class="n">${a.count} photos</span>` : ""}
       </a>
       <div class="meta">
-        <div class="catline ${p.category === "Other" ? "unsorted" : ""}">${esc(p.catPath)}${p.catEdited ? ` · <span class="tag">your pick</span>` : ""}</div>
+        <div class="catline ${p.category === "Other" ? "unsorted" : ""}">${esc(p.catPath)}${p.brand ? ` · <span class="brand">${esc(p.brand)}</span>` : ""}${p.catEdited ? ` · <span class="tag">your pick</span>` : ""}</div>
         <div class="en ${p.footballKit && !p.team ? "unsorted" : ""}">${esc(p.english)}</div>
         ${p.english !== a.title ? `<div class="zh">${esc(a.title)}</div>` : ""}
         <div class="src">${esc(storeName(a.store))} · saved ${esc(fmtDate(a.firstSeen))}${p.edited ? ` · <span class="tag">your fix</span>` : ""}</div>
@@ -491,10 +508,10 @@ async function setStoreCategory(store) {
 
 
 async function exportCsv() {
-  const rows = [["Name", "Category", "Subcategory", "Team", "Season", "Kit type", "Extras", "Store", "Original title", "Photos", "Album link", "Saved"]];
+  const rows = [["Name", "Category", "Subcategory", "Brand", "Team", "Season", "Kit type", "Extras", "Store", "Original title", "Photos", "Album link", "Saved"]];
   filtered().forEach((a) => {
     const p = info(a);
-    rows.push([p.english, p.category, p.sub, p.team || "", p.season || "", p.kit || "", p.extras.join(", "),
+    rows.push([p.english, p.category, p.sub, p.brand, p.team || "", p.season || "", p.kit || "", p.extras.join(", "),
       storeName(a.store), a.title, a.count || "", a.link, fmtDate(a.firstSeen)]);
   });
   const content = "﻿" + rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\r\n");

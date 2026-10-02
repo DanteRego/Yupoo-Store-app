@@ -137,6 +137,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("/catalog", static("catalog.html", "text/html; charset=utf-8"))
 	mux.HandleFunc("/teams.js", static("teams.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/categories.js", static("categories.js", "text/javascript; charset=utf-8"))
+	mux.HandleFunc("/brands.js", static("brands.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/library.js", static("library.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/catalog.js", static("catalog.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/shared.js", static("shared.js", "text/javascript; charset=utf-8"))

@@ -33,9 +33,11 @@ USING IT
                Undo appears for 15 seconds afterwards.
     Stores   - narrow to one supplier; "open" jumps back into that store,
                ✎ gives the store your own name
-    Filters  - the dropdowns above the items (category, team, season, kit type, extras,
+    Filters  - the dropdowns above the items (category, brand, team, season, kit type, extras,
                store) each have a search box; Team searches English or Chinese
                ("liv" or "利物浦") and only applies to clothing
+    Sort     - "Brand A–Z" groups everything by brand with a heading per brand;
+               the normal sort groups shoes by brand and clothing by team
     ✎ Team   - fix anything under "Unsorted"; it can learn that spelling
     🗑       - remove an item
     Export CSV / Backup - saved to your Downloads folder

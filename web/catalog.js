@@ -47,7 +47,7 @@ function filteredEntries() {
     if (!words.length) return true;
     const a = S.lib.albums[e.key];
     const p = a ? info(a) : null;
-    const hay = [e.note, e.cols.map((c) => c.name).join(" "), a ? a.title + " " + storeName(a.store) + " " + a.store : "",
+    const hay = [e.note, e.cols.map((c) => c.name).join(" "), p ? p.brand : "", a ? a.title + " " + storeName(a.store) + " " + a.store : "",
       p ? p.english + " " + p.catPath : ""].join(" ").toLowerCase();
     return words.every((w) => hay.includes(w));
   });
@@ -61,6 +61,7 @@ function filteredEntries() {
       return (px ? YO_categoryRank(px.category, px.sub) : 99999) - (py ? YO_categoryRank(py.category, py.sub) : 99999) || name(x).localeCompare(name(y));
     },
     name: (x, y) => name(x).localeCompare(name(y)),
+    brand: (x, y) => { const bx = A(x) ? info(A(x)).brand : "", by = A(y) ? info(A(y)).brand : ""; return (!bx !== !by ? (bx ? -1 : 1) : bx.localeCompare(by)) || name(x).localeCompare(name(y)); },
     store: (x, y) => (A(x) ? storeName(A(x).store) : "").localeCompare(A(y) ? storeName(A(y).store) : "") || name(x).localeCompare(name(y))
   }[S.sort];
   return list.sort(cmp);
@@ -137,7 +138,7 @@ function card(e) {
       ${a.count ? `<span class="n">${a.count} photos</span>` : ""}
     </a>
     <div class="meta">
-      <div class="catline ${p.category === "Other" ? "unsorted" : ""}">${esc(p.catPath)}</div>
+      <div class="catline ${p.category === "Other" ? "unsorted" : ""}">${esc(p.catPath)}${p.brand ? ` · <span class="brand">${esc(p.brand)}</span>` : ""}</div>
       <div class="en">${esc(p.english)}</div>
       ${p.english !== a.title ? `<div class="zh">${esc(a.title)}</div>` : ""}
       <div class="src">${esc(storeName(a.store))} · added ${esc(fmtDate(e.added))}</div>
@@ -222,11 +223,11 @@ async function saveNote(input) {
 
 async function exportCsv() {
   const c = current();
-  const rows = [["Name", "Category", "Subcategory", "Team", "Season", "Kit type", "Store", c ? "Note" : "Collections", "Album link", "Original title", "Added"]];
+  const rows = [["Name", "Category", "Subcategory", "Brand", "Team", "Season", "Kit type", "Store", c ? "Note" : "Collections", "Album link", "Original title", "Added"]];
   filteredEntries().forEach((e) => {
     const a = S.lib.albums[e.key]; if (!a) return;
     const p = info(a);
-    rows.push([p.english, p.category, p.sub, p.team || "", p.season || "", p.kit || "", storeName(a.store),
+    rows.push([p.english, p.category, p.sub, p.brand, p.team || "", p.season || "", p.kit || "", storeName(a.store),
       c ? e.note : e.cols.map((x) => x.name).join(", "), a.link, a.title, fmtDate(e.added)]);
   });
   const content = "﻿" + rows.map((r) => r.map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(",")).join("\r\n");

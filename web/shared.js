@@ -94,6 +94,7 @@ function info(a) {
   if (!clothing) Object.assign(r, { team: null, season: null, seasonKey: null, kit: null, extras: [] });
   else if (!kit) r.kit = null;
   if (clothing && a.team) Object.assign(r, { team: a.team, edited: true });
+  r.brand = YO_brand(a.title, c.category);
   // Football kits get the "Liverpool 2024/25 Home" style name; everything else a tidied-up title.
   r.english = r.team || kit ? YO_english(r) : YO_cleanName(a.title);
   cache.set(ck, r);
