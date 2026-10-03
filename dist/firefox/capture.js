@@ -25,20 +25,23 @@
     };
 
     // Keep everything inside the app window (Yupoo opens albums in new tabs).
-    document.addEventListener("click", (e) => {
-      const a = e.target.closest && e.target.closest("a[href]");
-      if (!a || e.defaultPrevented) return;
-      const t = (a.getAttribute("target") || "").toLowerCase();
-      if (t && t !== "_self") {
-        e.preventDefault();
-        location.href = a.href;
-      }
-    }, true);
-    const nativeOpen = window.open;
-    window.open = function (url) {
-      if (url) { location.href = new URL(url, location.href).href; return null; }
-      return nativeOpen.apply(window, arguments);
-    };
+    // In Firefox (the add-on) new tabs are normal, so this is only done in the Windows app.
+    if (!bridge.inBrowser) {
+      document.addEventListener("click", (e) => {
+        const a = e.target.closest && e.target.closest("a[href]");
+        if (!a || e.defaultPrevented) return;
+        const t = (a.getAttribute("target") || "").toLowerCase();
+        if (t && t !== "_self") {
+          e.preventDefault();
+          location.href = a.href;
+        }
+      }, true);
+      const nativeOpen = window.open;
+      window.open = function (url) {
+        if (url) { location.href = new URL(url, location.href).href; return null; }
+        return nativeOpen.apply(window, arguments);
+      };
+    }
 
     // ---------- reading albums from a page ----------
     function extractAlbums(doc) {
@@ -147,6 +150,7 @@
       @keyframes slide { from { left: -35%; } to { left: 100%; } }
       .pct { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 34px; }
     </style><div class="pill">
+      <button data-act="back" title="Back">◀ Back</button>
       <span class="msg"></span>
       <span class="prog" hidden><span class="track"><span class="fill"></span></span><span class="pct"></span></span>
       <button data-act="dismiss" class="x" title="Close this message" hidden>✕</button>
@@ -155,26 +159,8 @@
       <button data-act="open" class="main">Library</button></div>`;
     const $ = (s) => shadow.querySelector(s);
 
-    // ---------- the Back button, pinned to the top left ----------
-    const backHost = document.createElement("div");
-    backHost.style.cssText = "position:fixed;left:12px;top:12px;z-index:2147483646;";
-    const backShadow = backHost.attachShadow({ mode: "open" });
-    backShadow.innerHTML = `<style>
-      :host { all: initial; }
-      button { cursor: pointer; border: 0; border-radius: 999px; padding: 8px 15px; font: 600 13px "Segoe UI", -apple-system, Roboto, Arial, sans-serif;
-        background: #1f7a4d; color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
-      button:hover { background: #26935c; }
-    </style><button data-act="back" title="Go back to the previous page">◀ Back</button>`;
-    // Back to the previous page; if there isn't one (e.g. a fresh tab), back to the Library.
-    function goBack() {
-      if (history.length > 1) history.back();
-      else location.href = bridge.libraryUrl;
-    }
-    backShadow.addEventListener("click", (e) => { if (e.target.closest("button")) goBack(); });
-
     function renderPill() {
       if (!host.isConnected) document.documentElement.appendChild(host);
-      if (!backHost.isConnected) document.documentElement.appendChild(backHost);
       const s = myCrawl();
       let msg;
       if (notice) msg = notice;
@@ -200,7 +186,8 @@
       const b = e.target.closest("button");
       if (!b) return;
       const act = b.dataset.act;
-      if (act === "open") location.href = bridge.libraryUrl;
+      if (act === "back") history.back();
+      else if (act === "open") { if (bridge.openLibrary) bridge.openLibrary(); else location.href = bridge.libraryUrl; }
       else if (act === "store") saveWholeStore();
       else if (act === "dismiss") crawl.dismiss();
       else if (act === "page") captureThisPage(true);

@@ -274,7 +274,7 @@ function renderGrid() {
     </div>`;
   }).join("");
   renderPager(S.page, pages);
-  document.querySelectorAll("img[data-key]").forEach(loadThumb);
+  document.querySelectorAll("img[data-key]").forEach((img) => loadThumb(img));
 }
 
 // ---------- numbered pages ----------
@@ -436,21 +436,6 @@ async function refresh() {
   const scroll = $("main").scrollTop;
   await load(); renderAll();
   $("main").scrollTop = scroll;
-}
-
-// The ⟳ Refresh button: loads items saved since this page opened (e.g. by "Save whole store"
-// or another window), keeping your filters, page and place.
-async function refreshButton(btn) {
-  if (btn.classList.contains("spin")) return;
-  const before = all().length;
-  btn.classList.add("spin");
-  try {
-    await refresh();
-    const added = all().length - before;
-    toast(added > 0 ? `${added.toLocaleString()} new item${added === 1 ? "" : "s"} — ${all().length.toLocaleString()} in your library now.`
-      : `Up to date — ${all().length.toLocaleString()} items.`);
-  } catch (e) { toast("Couldn't refresh: " + e.message); }
-  btn.classList.remove("spin");
 }
 
 // ---------- actions ----------
@@ -615,7 +600,6 @@ document.addEventListener("click", (e) => {
   }
   else if (b.dataset.edit) editTeam(b.dataset.edit);
   else if (b.dataset.remove) removeKit(b.dataset.remove);
-  else if (b.dataset.act === "refresh") refreshButton(b);
   else if (b.dataset.act === "csv") exportCsv();
   else if (b.dataset.act === "backup") backup();
 });

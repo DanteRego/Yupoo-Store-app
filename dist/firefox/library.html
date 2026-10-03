@@ -3,17 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="kit-token" content="{{TOKEN}}">
+<meta name="kit-token" content="">
 <title>Yupoo Library</title>
 <link rel="icon" href="icon.svg">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
   <header>
-    <div class="left">
-      <h1><img src="icon.svg" alt="">Yupoo Library <span class="count"></span></h1>
-      <button class="iconbtn" data-act="refresh" title="Show items saved since this page was opened (e.g. from Save whole store)"><span>⟳</span> Refresh</button>
-    </div>
+    <h1><img src="icon.svg" alt="">Yupoo Library <span class="count"></span></h1>
     <form class="go">
       <input class="link" type="text" placeholder="Paste a Yupoo link, e.g. shida-tiyu888.x.yupoo.com/albums" autocomplete="off" spellcheck="false">
       <button type="submit">Open</button>
@@ -24,8 +21,7 @@
       <label class="toggle"><input type="checkbox" class="autosave"> Auto-save while browsing</label>
       <button data-act="csv">Export CSV</button>
       <button data-act="backup">Backup</button>
-      <button class="iconbtn" data-act="theme" title="Light / dark mode"></button>
-      <label class="btn">Restore<input type="file" class="restore" accept=".zip,application/zip" hidden></label>
+      <label class="btn">Restore<input type="file" class="restore" accept=".zip,.json,application/zip,application/json" hidden></label>
     </div>
   </header>
   <div class="body">
@@ -73,6 +69,7 @@
     </main>
   </div>
   <div class="toast"></div>
+  <script src="ext-page.js"></script>
   <script src="teams.js"></script>
   <script src="categories.js"></script>
   <script src="brands.js"></script>

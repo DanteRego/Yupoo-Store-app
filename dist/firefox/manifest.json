@@ -1,0 +1,41 @@
+{
+  "manifest_version": 2,
+  "name": "Yupoo Library",
+  "version": "1.0.0",
+  "description": "Saves the items you browse on Yupoo supplier catalogs into one searchable library — English names, categories, brands, teams — with collections like a wishlist.",
+  "icons": {
+    "48": "icon.svg",
+    "96": "icon.svg"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "{909bd369-6b8d-405a-830d-691b30c2b255}",
+      "strict_min_version": "115.0"
+    },
+    "gecko_android": {
+      "strict_min_version": "120.0"
+    }
+  },
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "webRequest",
+    "webRequestBlocking",
+    "*://*.yupoo.com/*"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  "browser_action": {
+    "default_title": "Open Yupoo Library",
+    "default_icon": "icon.svg"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.x.yupoo.com/*"],
+      "js": ["ext-content.js", "crawlbar.js", "capture.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

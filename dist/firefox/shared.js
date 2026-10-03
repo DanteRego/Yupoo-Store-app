@@ -17,18 +17,27 @@ let matcher = YO_buildMatcher({});
 const cache = new Map();
 
 // ---------- talking to the app ----------
+// These pages run in two places: the Windows app (they talk to its local server) and the Firefox
+// add-on, where firefox/ext-page.js loads first and sets YL_EXT to talk to the add-on instead.
+const EXT = window.YL_EXT || null;
+const PAGES = (EXT && EXT.pages) || { library: "/", catalog: "/catalog" };
+
 // Other open windows (e.g. the Catalog in its own window) hear about changes through this channel.
 const channel = (() => { try { return new BroadcastChannel("yupoo-library"); } catch (e) { return null; } })();
 function tellOtherWindows(what) { try { if (channel) channel.postMessage({ what }); } catch (e) {} }
 
 async function call(method, path, body, raw) {
-  const res = await fetch(path, {
-    method,
-    headers: Object.assign({ "X-Kit-Token": TOKEN }, raw ? {} : { "Content-Type": "application/json" }),
-    body: body === undefined ? undefined : (raw ? body : JSON.stringify(body))
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || res.statusText);
+  let data;
+  if (EXT) data = await EXT.call(method, path, body, raw);
+  else {
+    const res = await fetch(path, {
+      method,
+      headers: Object.assign({ "X-Kit-Token": TOKEN }, raw ? {} : { "Content-Type": "application/json" }),
+      body: body === undefined ? undefined : (raw ? body : JSON.stringify(body))
+    });
+    data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText);
+  }
   if (method !== "GET") tellOtherWindows(path.indexOf("/api/collections") === 0 ? "collections" : "library");
   return data;
 }
@@ -53,29 +62,6 @@ document.addEventListener("click", (e) => {
 });
 
 // ---------- data ----------
-// ---------- light / dark mode ----------
-// The 🌓 button cycles Auto (follow Windows) → Dark → Light. The choice is saved in the app's settings;
-// a copy in localStorage lets the next page show the right colours straight away.
-const THEMES = { "": "🌓 Auto", dark: "🌙 Dark", light: "☀️ Light" };
-function applyTheme(theme) {
-  if (theme) document.documentElement.setAttribute("data-theme", theme);
-  else document.documentElement.removeAttribute("data-theme");
-  try { localStorage.setItem("theme", theme); } catch (e) {}
-  document.querySelectorAll('[data-act="theme"]').forEach((b) => {
-    b.textContent = THEMES[theme] || THEMES[""];
-    b.title = "Colours: " + (theme ? theme + " mode" : "automatic (follows Windows)") + " — click to change";
-  });
-}
-async function cycleTheme() {
-  const order = ["", "dark", "light"];
-  const next = order[(order.indexOf(S.settings.theme || "") + 1) % order.length];
-  S.settings.theme = next;
-  applyTheme(next);
-  try { await call("POST", "/api/settings", S.settings); } catch (e) { toast("Couldn't save the colour setting: " + e.message); }
-}
-applyTheme((() => { try { return localStorage.getItem("theme") || ""; } catch (e) { return ""; } })());
-document.addEventListener("click", (e) => { if (e.target.closest('[data-act="theme"]')) cycleTheme(); });
-
 let version = -1;
 async function load() {
   const d = await call("GET", "/api/state");
@@ -84,7 +70,6 @@ async function load() {
   S.aliases = d.aliases || {};
   S.myTeams = d.myTeams || {};
   S.settings = Object.assign({ autoSave: true }, d.settings || {});
-  applyTheme(S.settings.theme || "");
   S.storeNames = d.storeNames || {};
   S.storeCats = d.storeCategories || {};
   S.collections = d.collections || [];
@@ -127,14 +112,22 @@ function info(a) {
 
 // Photos come from the app's saved copies. If one isn't ready yet, keep retrying for a while
 // (the live Yupoo photo can't be shown here, since Yupoo blocks photos outside its own pages).
+// In the Firefox add-on the photo comes straight from Yupoo (the add-on adds the header Yupoo wants).
 function loadThumb(img, attempt) {
   attempt = attempt || 0;
+  const maxTries = EXT ? 2 : 12;
   img.onload = () => { img.style.visibility = ""; img.parentElement.classList.remove("waiting"); };
   img.onerror = () => {
     img.style.visibility = "hidden";
     img.parentElement.classList.add("waiting");
-    if (attempt < 12) setTimeout(() => { if (img.isConnected) loadThumb(img, attempt + 1); }, Math.min(2000 + attempt * 1500, 10000));
+    if (attempt < maxTries) setTimeout(() => { if (img.isConnected) loadThumb(img, attempt + 1); }, Math.min(2000 + attempt * 1500, 10000));
   };
+  if (EXT) {
+    const cover = img.dataset.cover || "";
+    if (!cover) { img.onerror(); return; }
+    img.src = cover + (attempt ? (cover.indexOf("?") === -1 ? "?" : "&") + "r=" + attempt : "");
+    return;
+  }
   img.src = "/thumb/" + encodeURIComponent(img.dataset.key.replace(/[^A-Za-z0-9._-]/g, "_")) + (attempt ? "?r=" + attempt : "");
 }
 
@@ -146,7 +139,7 @@ function collectionsOf(key) {
 
 // Opens the Catalog: in this window, or (newWindow) in a window of its own.
 function openCatalog(newWindow, collectionId) {
-  const url = "/catalog" + (collectionId ? "#" + encodeURIComponent(collectionId) : "");
+  const url = PAGES.catalog + (collectionId ? "#" + encodeURIComponent(collectionId) : "");
   if (newWindow) {
     const w = window.open(url, "yupoo-catalog", "width=1240,height=860");
     if (w) { w.focus(); return; }

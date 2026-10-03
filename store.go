@@ -44,6 +44,8 @@ type AlbumIn struct {
 
 type Settings struct {
 	AutoSave bool `json:"autoSave"`
+	// Theme is "dark", "light", or "" (follow Windows). Set with the 🌓 button.
+	Theme string `json:"theme,omitempty"`
 }
 
 type libraryFile struct {
