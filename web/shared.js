@@ -87,6 +87,8 @@ async function load() {
   applyTheme(S.settings.theme || "");
   S.storeNames = d.storeNames || {};
   S.storeCats = d.storeCategories || {};
+  // Hovering over the page title shows which version of the app this is.
+  if (d.appVersion) { const h = document.querySelector("header h1"); if (h) h.title = "Yupoo Library version " + d.appVersion; }
   S.collections = d.collections || [];
   matcher = YO_buildMatcher(allAliases());
   cache.clear();

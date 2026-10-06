@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -192,4 +193,98 @@ func (l *Library) forgetInCollections(keys []string) {
 	for _, c := range l.data.Collections {
 		removeFromCollection(c, keys)
 	}
+}
+
+// ---------- sharing a collection as a file ----------
+
+// SharedCollection is the file a collection is exported to (made by the Catalog's "Export"),
+// so someone else with the app can import it. It carries the items themselves, because the
+// other person may never have saved them.
+type SharedCollection struct {
+	Type            string            `json:"type"` // always "yupoo-library-collection"
+	Version         int               `json:"version"`
+	Name            string            `json:"name"`
+	Exported        int64             `json:"exported"`
+	StoreNames      map[string]string `json:"storeNames,omitempty"`
+	StoreCategories map[string]string `json:"storeCategories,omitempty"`
+	Items           []SharedItem      `json:"items"`
+}
+
+type SharedItem struct {
+	Album Album  `json:"album"`
+	Note  string `json:"note,omitempty"`
+}
+
+const sharedCollectionType = "yupoo-library-collection"
+
+// ImportCollection adds a shared collection: items you don't have yet are added to your library,
+// and a new collection is made with the same name (plus "(2)" etc. if you already have one).
+func (l *Library) ImportCollection(in SharedCollection) (*Collection, int, error) {
+	if in.Type != sharedCollectionType || len(in.Items) == 0 {
+		return nil, 0, errors.New("That file isn't a shared Yupoo Library collection.")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	name := cleanName(in.Name, 70)
+	if name == "" {
+		name = "Shared collection"
+	}
+	base := name
+	for i := 2; l.collectionNamed(name); i++ {
+		name = base + " (" + strconv.Itoa(i) + ")"
+	}
+	now := time.Now().UnixMilli()
+	c := &Collection{ID: newCollectionID(), Name: name, Items: []CollectionItem{}, Created: now}
+	newItems := 0
+	seen := map[string]bool{}
+	for _, it := range in.Items {
+		a := it.Album
+		if a.Host == "" || a.ID == "" {
+			continue
+		}
+		a.Key = a.Host + ":" + a.ID
+		if seen[a.Key] {
+			continue
+		}
+		seen[a.Key] = true
+		if l.data.Albums[a.Key] == nil {
+			cp := a
+			cp.FirstSeen, cp.LastSeen = now, now
+			if cp.Store == "" {
+				cp.Store = strings.Split(cp.Host, ".")[0]
+			}
+			l.data.Albums[cp.Key] = &cp
+			l.queueThumb(&cp)
+			newItems++
+		}
+		note := strings.TrimSpace(it.Note)
+		if r := []rune(note); len(r) > 500 {
+			note = string(r[:500])
+		}
+		c.Items = append(c.Items, CollectionItem{Key: a.Key, Added: now, Note: note})
+	}
+	// Store names the sender gave their stores, unless you've named that store yourself.
+	for k, v := range in.StoreNames {
+		if _, mine := l.data.StoreNames[k]; !mine && strings.TrimSpace(v) != "" {
+			l.data.StoreNames[k] = v
+		}
+	}
+	// ...and what those stores sell (🏷), again only where you haven't set it yourself.
+	for k, v := range in.StoreCategories {
+		if _, mine := l.data.StoreCategories[k]; !mine && strings.TrimSpace(v) != "" {
+			l.data.StoreCategories[k] = v
+		}
+	}
+	l.data.Collections = append(l.data.Collections, c)
+	l.scheduleSave()
+	return c, newItems, nil
+}
+
+func (l *Library) collectionNamed(name string) bool {
+	for _, c := range l.data.Collections {
+		if strings.EqualFold(c.Name, name) {
+			return true
+		}
+	}
+	return false
 }

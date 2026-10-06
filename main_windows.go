@@ -3,6 +3,8 @@
 package main
 
 import (
+	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
 	"unsafe"
@@ -54,6 +56,16 @@ func main() {
 		return app.crawlAction(act, pageURL, cookie, mode, min)
 	})
 	w.Init(bridgeJS(app.baseURL) + crawlbarJS + captureJS)
+	go CleanupOldVersion() // removes the previous program left behind by an update
+	go offerUpdate(w)      // checks GitHub for a newer version (see update.go)
 	w.Navigate(app.baseURL)
 	w.Run()
+
+	// After "Update now": close everything, save, then start the new version.
+	if relaunchPath != "" {
+		w.Destroy()
+		_ = app.lib.Flush()
+		_ = exec.Command(relaunchPath).Start()
+		os.Exit(0)
+	}
 }

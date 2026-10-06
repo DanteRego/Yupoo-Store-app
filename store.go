@@ -320,6 +320,7 @@ func (l *Library) StateJSON() ([]byte, error) {
 		"storeNames":      l.data.StoreNames,
 		"storeCategories": l.data.StoreCategories,
 		"collections":     l.data.Collections,
+		"appVersion":      AppVersion,
 		"version":         l.version,
 	})
 }

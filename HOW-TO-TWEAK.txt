@@ -25,3 +25,17 @@ JUST ADDING A SUPPLIER'S NICKNAME FOR A TEAM? No building needed:
 
 Your saved items live in %APPDATA%\YupooLibrary, separate from this folder,
 so rebuilding or undoing code changes never deletes them.
+
+SENDING AN UPDATE TO EVERYONE (the app checks GitHub each time it opens)
+  Everyone's app looks at the "Releases" of github.com/DanteRego/Yupoo-Store-app.
+  When there's a newer release, it asks them "Update now?" — their saved items stay as they are.
+  1. Ask Claude Code to "raise the version" (or open update.go yourself and change
+       const AppVersion = "1.0.0"   to the next number, e.g. "1.0.1").
+  2. Double-click build.bat, check the app works, then commit and "Push origin" in GitHub Desktop.
+  3. On github.com/DanteRego/Yupoo-Store-app click "Releases" (right side) -> "Draft a new release".
+  4. "Choose a tag": type the same number with a v in front, e.g.  v1.0.1  -> "Create new tag".
+  5. Title: e.g. "Yupoo Library 1.0.1". In the description, write what's new in a few lines —
+     people see this text in the "Update available" box.
+  6. Drag YupooLibrary.exe (from this folder) into "Attach binaries". Keep the name YupooLibrary.exe.
+  7. Click "Publish release". The next time anyone opens the app, it offers the update.
+  Don't tick "Set as a pre-release" — pre-releases are ignored by the update check.

@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -243,6 +244,18 @@ func (a *App) routes() http.Handler {
 	// The Catalog's collections (see collections.go).
 	mux.HandleFunc("GET /api/collections", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 		return a.lib.CollectionsList(), nil
+	}))
+	// Importing a collection someone sent you (a file made with the Catalog's "Export").
+	mux.HandleFunc("POST /api/import-collection", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in SharedCollection
+		if err := decode(r, &in); err != nil {
+			return nil, errors.New("That file isn't a shared Yupoo Library collection.")
+		}
+		c, n, err := a.lib.ImportCollection(in)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"collection": c, "newItems": n}, nil
 	}))
 	mux.HandleFunc("POST /api/collections/{act}", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 		var in CollectionRequest

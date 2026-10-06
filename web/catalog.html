@@ -22,6 +22,7 @@
       <h3>Collections</h3>
       <div class="list cols"></div>
       <button class="newcol" data-act="new">＋ New collection</button>
+      <label class="newcol" title="Open a collection file someone sent you (made with 📤 Export to share)">📥 Import a shared collection<input type="file" class="importcol" accept=".json,application/json" hidden></label>
     </aside>
     <main>
       <div class="topbar">
@@ -30,6 +31,7 @@
         <span class="sub colsub"></span>
         <span class="grow"></span>
         <button data-act="rename" class="needcol">✎ Rename</button>
+        <button data-act="share" class="needcol" title="Save this collection as a file you can send to someone else with Yupoo Library">📤 Export to share</button>
         <button data-act="csv">Export CSV</button>
         <button data-act="delete" class="needcol">🗑 Delete collection</button>
       </div>

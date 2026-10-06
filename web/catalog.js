@@ -100,8 +100,9 @@ function renderGrid() {
       <ol>
         <li>Press <b>Start a Wishlist</b> below (or <b>＋ New collection</b> on the left).</li>
         <li>In the Library, click <b>☆</b> on any item to add it — or <b>☑ Select</b> several and use <b>☆ Add to collection</b>.</li>
-        <li>Come back here to see them, add notes like size or quantity, and export the list.</li>
+        <li>Come back here to see them, add notes like size or quantity, and export the list — or <b>📤 Export to share</b> it with a friend.</li>
       </ol>
+      <p>Someone sent you a collection file? Open it with <b>📥 Import a shared collection</b> on the left.</p>
       <p><button class="more" data-act="wishlist">Start a Wishlist</button></p></div>`;
     return;
   }
@@ -238,6 +239,40 @@ async function exportCsv() {
   } catch (e) { toast("Couldn't save the CSV: " + e.message); }
 }
 
+// ---------- sharing a collection as a file ----------
+// "📤 Export to share" saves the collection (its items, notes and your fixes) as a file in your Downloads.
+// Anyone with Yupoo Library can open it with "📥 Import a shared collection" — they don't need the items already.
+async function exportShared() {
+  const c = current(); if (!c) return;
+  const items = [], storeNames = {}, storeCategories = {};
+  c.items.forEach((it) => {
+    const a = S.lib.albums[it.key]; if (!a) return;
+    items.push({ note: it.note || "", album: { host: a.host, store: a.store, id: a.id, title: a.title, cover: a.cover, count: a.count || 0,
+      link: a.link, team: a.team || "", category: a.category || "" } });
+    if (S.storeNames[a.store]) storeNames[a.store] = S.storeNames[a.store];
+    if (S.storeCats[a.store]) storeCategories[a.store] = S.storeCats[a.store];
+  });
+  if (!items.length) { toast("There's nothing in this collection to share yet."); return; }
+  const file = { type: "yupoo-library-collection", version: 1, name: c.name, exported: Date.now(), storeNames, storeCategories, items };
+  const fileName = c.name.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "collection";
+  try {
+    const res = await call("POST", "/api/save-file", { name: `${fileName}.yupoo-collection.json`, content: JSON.stringify(file, null, 1) });
+    toast(`Saved “${c.name}” (${plural(items.length, "item")}) to ${res.path}. Send that file to anyone with Yupoo Library — they open it with 📥 Import.`);
+  } catch (e) { toast("Couldn't save the file: " + e.message); }
+}
+
+async function importShared(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch (e) { toast("That file isn't a shared Yupoo Library collection."); return; }
+  try {
+    const res = await call("POST", "/api/import-collection", data);
+    await load();
+    selectCollection(res.collection.id);
+    const n = res.collection.items.length;
+    toast(`Imported “${res.collection.name}” — ${plural(n, "item")}` + (res.newItems ? `, ${res.newItems} of them new to your library.` : ", all already in your library."));
+  } catch (e) { toast(e.message); }
+}
+
 // Opening an album from the Catalog's own window shows it in the main app window,
 // so this window stays on your list.
 function openAlbum(url) {
@@ -268,6 +303,7 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.act === "wishlist") newCollection("Wishlist");
   else if (b.dataset.act === "rename" && current()) renameCollection(current().id);
   else if (b.dataset.act === "delete" && current()) deleteCollection(current().id);
+  else if (b.dataset.act === "share") exportShared();
   else if (b.dataset.act === "csv") exportCsv();
   else if (b.dataset.act === "library") goToLibrary();
   else if (b.dataset.act === "newwin") openCatalog(true, S.colId);
@@ -277,6 +313,7 @@ document.addEventListener("change", (e) => { if (e.target.matches(".note")) save
 document.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches(".note")) e.target.blur(); });
 $(".q").addEventListener("input", (e) => { S.q = e.target.value; renderGrid(); });
 $(".sort").addEventListener("change", (e) => { S.sort = e.target.value; renderGrid(); });
+$(".importcol").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) importShared(f); });
 window.addEventListener("hashchange", () => { S.colId = null; render(); });
 
 // The Library (maybe in the other window) changed something: keep this page in step.

@@ -5,6 +5,10 @@ Paste a Yupoo link, browse inside the app, and every item you see is saved into
 one library on your PC with a photo. Football kits also get English names,
 team, season and kit type.
 
+UPDATES
+  Each time it opens, the app checks for a newer version and asks before updating.
+  Updating only replaces the program — your saved items, collections and settings stay.
+
 STARTING IT
 1. Unzip, then double-click YupooLibrary.exe. No install needed.
 2. The first time, Windows may say "Windows protected your PC" because the app
@@ -52,6 +56,8 @@ USING IT
     In the Catalog: notes per item (size, quantity…), ✕ takes an item out (Undo),
     ✎ rename / 🗑 delete a collection (the items stay in your library),
     Export CSV saves the list you're looking at.
+    📤 Export to share saves a collection as a file you can send to anyone with
+    the app; they open it with 📥 Import a shared collection (on the left).
 
 WHERE YOUR DATA LIVES
   %APPDATA%\YupooLibrary\library.json   your items

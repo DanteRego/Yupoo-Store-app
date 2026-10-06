@@ -167,3 +167,4 @@ header .left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 header .iconbtn { padding: 7px 11px; font-weight: 600; }
 header .iconbtn.spin span { display: inline-block; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+label.newcol { display: block; padding: 8px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; margin-top: 6px; }
