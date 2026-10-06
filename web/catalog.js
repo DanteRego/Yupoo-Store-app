@@ -281,10 +281,9 @@ function openAlbum(url) {
   }
   location.href = url;
 }
+// "◀ Library" (top left): back to the Library in this same window, where your filters, page and
+// scroll position are restored. (In a separate Catalog window, that window becomes a Library too.)
 function goToLibrary() {
-  if (isOwnWindow) {
-    try { window.opener.location.href = "/"; window.opener.focus(); return; } catch (e) {}
-  }
   location.href = "/";
 }
 
