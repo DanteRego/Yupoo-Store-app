@@ -26,7 +26,7 @@ The owner is new to programming: explain changes in plain words and keep steps s
 - `web/crawlbar.js` — loaded on every page (Yupoo and Library): the bottom-right progress card, which shrinks to a round badge with "–".
 - `store.go` — the saved library (`%APPDATA%\YupooLibrary\library.json`), backup/restore, `my-teams.txt`, your store names, `RemoveStore` (🗑 next to a store in the sidebar: deletes its items, photos, collection entries and store settings).
 - `thumbs.go` — downloads and shrinks cover photos (Yupoo needs a Referer header).
-- `server.go` — local web server + API the Library page calls (token-protected); data folder locations
+- `server.go` — local web server + API the Library page calls (token-protected); data folder locations; `downloadsDir()` (CSV/backup/shared files) asks Windows for the real Downloads folder (`downloads_windows.go`) — the owner's is `J:Downloads`, not under the user profile
   (moves the old `KitLibrary` / `M:\Kit Library` folders to the new names on first start).
 - `main_windows.go` — the app window; `main_other.go` — Mac/Linux test mode (library only).
 - `update.go`, `update_windows.go` — update check (also the Library's "⬆ Check for updates" button → `kitCheckUpdate` binding → `offerUpdate(w, true)`, which always answers): a few seconds after opening, the app asks GitHub for the latest release of `DanteRego/Yupoo-Store-app`; if its tag (e.g. v1.0.1) is newer than `AppVersion`, a Yes/No box explains what's new and that data isn't touched. Yes downloads the release's `YupooLibrary.exe`, renames the running exe to `.old`, puts the new one in place and restarts (the new copy deletes `.old`). Raise `AppVersion` for every release (steps in HOW-TO-TWEAK.txt). `KIT_UPDATE_API` overrides the GitHub address for testing.

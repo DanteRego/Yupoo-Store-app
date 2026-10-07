@@ -72,6 +72,11 @@ func downloadsDir() string {
 	if d := os.Getenv("KIT_DOWNLOADS_DIR"); d != "" {
 		return d
 	}
+	if d := systemDownloads(); d != "" {
+		if st, err := os.Stat(d); err == nil && st.IsDir() {
+			return d
+		}
+	}
 	if h, err := os.UserHomeDir(); err == nil {
 		d := filepath.Join(h, "Downloads")
 		if st, err := os.Stat(d); err == nil && st.IsDir() {
