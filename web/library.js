@@ -275,7 +275,7 @@ function renderGrid() {
     </div>`;
   }).join("");
   renderPager(S.page, pages);
-  document.querySelectorAll("img[data-key]").forEach(loadThumb);
+  watchThumbs(document.querySelectorAll("img[data-key]"));
 }
 
 // ---------- numbered pages ----------
