@@ -189,6 +189,24 @@ function loadThumb(img, attempt) {
   img.src = "/thumb/" + encodeURIComponent(img.dataset.key.replace(/[^A-Za-z0-9._-]/g, "_")) + (attempt ? "?r=" + attempt : "");
 }
 
+// A page (or an uncollapsed Catalog collection) can list hundreds of items at once; asking
+// for all of their photos in the same instant is what leaves many stuck on "Photo loading…"
+// behind the app's gentle, one-at-a-time downloader. So only ask once a card is actually
+// about to be seen, and forget about cards that get replaced (filtering, paging) before that.
+const thumbObserver = "IntersectionObserver" in window ? new IntersectionObserver((entries) => {
+  entries.forEach((e) => {
+    if (!e.isIntersecting) return;
+    thumbObserver.unobserve(e.target);
+    loadThumb(e.target);
+  });
+}, { rootMargin: "600px 0px" }) : null;
+
+function watchThumbs(imgs) {
+  if (!thumbObserver) { imgs.forEach((img) => loadThumb(img)); return; }
+  thumbObserver.disconnect(); // the previous render's cards are already gone
+  imgs.forEach((img) => thumbObserver.observe(img));
+}
+
 // ---------- collections (the Catalog) ----------
 // The collections an item is in.
 function collectionsOf(key) {

@@ -121,7 +121,7 @@ function renderGrid() {
     return;
   }
   $(".grid").innerHTML = list.map(card).join("");
-  document.querySelectorAll("img[data-key]").forEach(loadThumb);
+  watchThumbs(document.querySelectorAll("img[data-key]"));
 }
 
 function card(e) {
