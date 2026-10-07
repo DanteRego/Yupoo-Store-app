@@ -76,6 +76,11 @@ type libraryFile struct {
 	// NewCheck is, per store address, the highest album number the start-up check has seen there.
 	// Albums with a higher number are new additions (see newcheck.go).
 	NewCheck map[string]int64 `json:"newCheck,omitempty"`
+	// StorePasswords: passwords for stores that need one (store -> password), entered in the Library's
+	// "🔒 Needs a password" list or picked up when you type it on the store's page in the app.
+	StorePasswords map[string]string `json:"storePasswords,omitempty"`
+	// StoreLocked: stores the start-up check couldn't read because they need a password (store -> when).
+	StoreLocked map[string]int64 `json:"storeLocked,omitempty"`
 }
 
 type thumbJob struct{ key, host, cover string }
@@ -133,6 +138,12 @@ func OpenLibrary(dir, thumbDir string) (*Library, error) {
 	}
 	if l.data.NewCheck == nil {
 		l.data.NewCheck = map[string]int64{}
+	}
+	if l.data.StorePasswords == nil {
+		l.data.StorePasswords = map[string]string{}
+	}
+	if l.data.StoreLocked == nil {
+		l.data.StoreLocked = map[string]int64{}
 	}
 	l.ensureMyTeamsFile()
 	go l.thumbWorker()
@@ -334,6 +345,8 @@ func (l *Library) RemoveStore(store string) int {
 	l.forgetInCollections(keys)
 	delete(l.data.StoreNames, store)
 	delete(l.data.StoreCategories, store)
+	delete(l.data.StorePasswords, strings.ToLower(store))
+	delete(l.data.StoreLocked, strings.ToLower(store))
 	l.scheduleSave()
 	return len(keys)
 }
@@ -428,6 +441,7 @@ func (l *Library) StateJSON() ([]byte, error) {
 		"storeNames":      l.data.StoreNames,
 		"storeCategories": l.data.StoreCategories,
 		"collections":     l.data.Collections,
+		"lockedStores":    l.lockedStores(),
 		"appVersion":      AppVersion,
 		"version":         l.version,
 	})
@@ -517,6 +531,11 @@ func (l *Library) Restore(zipBytes []byte) (int, error) {
 	for k, v := range incoming.StoreCategories {
 		if _, mine := l.data.StoreCategories[k]; !mine {
 			l.data.StoreCategories[k] = v
+		}
+	}
+	for k, v := range incoming.StorePasswords {
+		if _, mine := l.data.StorePasswords[k]; !mine {
+			l.data.StorePasswords[k] = v
 		}
 	}
 	l.mergeCollections(incoming.Collections)

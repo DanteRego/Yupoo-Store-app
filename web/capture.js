@@ -25,6 +25,14 @@
       if (u.startsWith("//")) return location.protocol + u;
       try { return new URL(u, location.origin).href; } catch (e) { return ""; }
     };
+    // A store with a password: once you've typed it in Yupoo's box, Yupoo keeps it in the
+    // "indexlockcode" cookie. Hand it to the app so its ✨ New Additions check can read this store too
+    // (the app first asks Yupoo whether it's really this store's password).
+    try {
+      const m = document.cookie.match(/(?:^|;\s*)indexlockcode=([^;]*)/);
+      if (m && bridge && bridge.storePassword) bridge.storePassword(STORE, decodeURIComponent(m[1]));
+    } catch (e) {}
+
     const albumLink = (href) => {
       const link = new URL(href, location.origin);
       link.pathname = link.pathname.replace(/^\/photos\/[^/]+/, ""); // /photos/<store>/albums/1 -> /albums/1

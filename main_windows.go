@@ -55,6 +55,9 @@ func main() {
 	_ = w.Bind("kitCrawl", func(act, pageURL, cookie, mode string, min bool) CrawlReply {
 		return app.crawlAction(act, pageURL, cookie, mode, min)
 	})
+	// A store's password typed in Yupoo's own box (capture.js reads Yupoo's cookie), so the
+	// "✨ New Additions" check can read that store too.
+	_ = w.Bind("kitStorePassword", func(store, pw string) { go app.RememberTypedPassword(store, pw) })
 	mainWindow = uintptr(w.Window())                                 // so the folder picker (Settings) opens on top of the app
 	uiLang = func() string { return app.lib.GetSettings().Language } // update messages in your language
 	updatedTo = func() string { return app.lib.GetSettings().UpdatedTo }

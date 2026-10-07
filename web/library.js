@@ -103,7 +103,38 @@ function renderNewItem() {
   const busy = newCheck && newCheck.running;
   $(".newlist").innerHTML = `<div class="item newadd ${S.view === "new" ? "on" : ""} ${n ? "has" : ""}" role="button" tabindex="0" data-view="new"
     title="${esc(busy ? L("Checking your stores for new items…", "正在检查店铺的新品…") : t("Items your stores added since you last opened the app"))}">
-    <span class="name">${t("✨ New Additions")}${busy ? ` <span class="spinning">⟳</span>` : ""}</span><span class="c">${n}</span></div>`;
+    <span class="name">${t("✨ New Additions")}${busy ? ` <span class="spinning">⟳</span>` : ""}</span><span class="c">${n}</span></div>` +
+    lockedList();
+}
+
+// "🔒 Needs a password": stores the check can't look into until you type their password.
+function lockedList() {
+  const locked = S.locked || [];
+  if (!locked.length) return "";
+  return `<div class="locked"><div class="lockhead" title="${esc(t("The check can't see inside these stores without their password"))}">${L(`🔒 Needs a password (${locked.length})`, `🔒 需要密码（${locked.length}）`)}</div>` +
+    locked.map((s) => `<div class="lockrow"><span class="name" title="${esc(s.saved ? L("The saved password stopped working — the store may have changed it", "保存的密码失效了——店铺可能改了密码") : s.host)}">${esc(storeName(s.store))}${s.saved ? ` <span class="warnmark">⚠</span>` : ""}</span>` +
+      `<button data-store-pw="${esc(s.store)}">${t(s.saved ? "New password" : "Enter password")}</button></div>`).join("") + `</div>`;
+}
+
+async function enterStorePassword(store) {
+  const s = (S.locked || []).find((x) => x.store === store) || { store, saved: false };
+  const input = prompt(L(`Password for “${storeName(store)}”\n\nThis store is locked with a password (the supplier gives it to you). Type it here so the app can check this store for new items too.` +
+    (s.saved ? "\n\nThe password saved before stopped working — the store may have changed it." : ""),
+    `“${storeName(store)}”的密码\n\n这个店铺设了密码（供应商会告诉你）。在这里输入，应用就能检查这个店铺的新品。` +
+    (s.saved ? "\n\n之前保存的密码失效了——店铺可能改了密码。" : "")), "");
+  if (input === null || !input.trim()) return;
+  toast(L("Checking the password with Yupoo…", "正在向 Yupoo 验证密码…"));
+  try {
+    newCheck = await call("POST", "/api/store-password", { store, password: input.trim() });
+  } catch (e) {
+    toast(e.message === "wrong password"
+      ? L(`That isn't the right password for “${storeName(store)}”. Check it with the supplier and try again.`, `“${storeName(store)}”的密码不对。请向供应商确认后再试。`)
+      : L("Couldn't save the password: ", "无法保存密码：") + e.message);
+    return;
+  }
+  toast(L(`Password saved — checking “${storeName(store)}” now.`, `密码已保存——正在检查“${storeName(store)}”。`));
+  renderNewItem(); renderNewHead();
+  pollNewCheck();
 }
 
 // The heading on the New Additions page: what the check is doing, and the buttons.
@@ -125,8 +156,8 @@ function renderNewHead() {
       `${st.first === st.done ? "这是第一次检查，还没有可以比较的" : `${st.first} 个店铺是第一次检查`}——以后它们新上架的商品会显示在这里。`);
     if (st.failed) status += " " + L("Yupoo stopped answering, so some stores weren't checked — try ⟳ Check now in a few minutes.", "Yupoo 停止响应，部分店铺没有检查——过几分钟再点“⟳ 立即检查”。");
     else if (st.skipped) status += " " + L(`${st.skipped} store${st.skipped === 1 ? "" : "s"} couldn't be opened.`, `${st.skipped} 个店铺打不开。`);
-    if (st.locked) status += " " + L(`${st.locked} store${st.locked === 1 ? " needs a password or is closed, so it" : "s need a password or are closed, so they"} can't be checked.`,
-      `${st.locked} 个店铺需要密码或已关闭，无法检查。`);
+    if (st.locked) status += " " + L(`${st.locked} store${st.locked === 1 ? " needs a password" : "s need a password"} — enter ${st.locked === 1 ? "it" : "them"} in the 🔒 list on the left.`,
+      `${st.locked} 个店铺需要密码——请在左边的 🔒 列表里输入。`);
   } else {
     status = L(`Your ${nStores} stores are checked for new items a few seconds after the app opens.`, `应用打开几秒后，会检查你的 ${nStores} 个店铺有没有新品。`);
   }
@@ -135,7 +166,9 @@ function renderNewHead() {
       <button data-act="check-now" ${st.running ? "disabled" : ""} title="${t("Look through your stores for new items again")}">${t("⟳ Check now")}</button>
       <button data-act="seen-all" class="primary" ${n ? "" : "disabled"} title="${t("Take these items off New Additions (they stay in your library)")}">${L(`✓ Mark ${n === inView().length ? "all" : "these"} as seen${n ? ` (${n})` : ""}`, `✓ ${n === inView().length ? "全部" : "这些"}标为已看${n ? `（${n}）` : ""}`)}</button>
       <button data-act="leave-new">${t("◀ All items")}</button></div>
-    <div class="newstatus ${st.running ? "busy" : ""}">${esc(status)}</div>`;
+    <div class="newstatus ${st.running ? "busy" : ""}">${esc(status)}</div>
+    ${inView().length ? `<div class="newstatus">${L("New items stay here until you mark them as seen (✓ on a card, or the button above) — also after closing the app.",
+      "新品会一直留在这里，直到你标为已看（卡片上的 ✓ 或上面的按钮）——关掉应用也不会消失。")}</div>` : ""}`;
 }
 
 function setView(view) {
@@ -153,7 +186,8 @@ async function pollNewCheck() {
   try { st = await call("GET", "/api/new-check"); } catch (e) { return; }
   const was = newCheck;
   newCheck = st;
-  if (was && st.found > (was.found || 0)) await refresh(); // new items came in: show them
+  // New items came in, or the check finished (the 🔒 list may have changed): show it.
+  if (was && (st.found > (was.found || 0) || (was.running && !st.running))) await refresh();
   else { renderNewItem(); renderNewHead(); }
   if (was && was.running && !st.running && st.found) {
     toast(L(`Found ${st.found} new item${st.found === 1 ? "" : "s"} in your stores.`, `在你的店铺里找到 ${st.found} 件新品。`),
@@ -171,9 +205,15 @@ async function checkNow() {
 
 async function markSeen(keys) {
   if (!keys.length) return;
-  try { await call("POST", "/api/new-seen", { keys }); } catch (e) { toast(L("Couldn't mark them as seen: ", "无法标为已看：") + e.message); return; }
+  let res;
+  try { res = await call("POST", "/api/new-seen", { keys }); } catch (e) { toast(L("Couldn't mark them as seen: ", "无法标为已看：") + e.message); return; }
   await refresh();
-  toast(L(`Marked ${keys.length} item${keys.length === 1 ? "" : "s"} as seen — still in your library.`, `已把 ${keys.length} 件标为已看——它们仍在图库里。`));
+  // Undo puts them back on New Additions (e.g. after clicking "Mark all as seen" by accident).
+  toast(L(`Marked ${keys.length} item${keys.length === 1 ? "" : "s"} as seen — still in your library.`, `已把 ${keys.length} 件标为已看——它们仍在图库里。`), "Undo", async () => {
+    try { await call("POST", "/api/new-unseen", { items: res.was || {} }); } catch (e) { toast(L("Couldn't undo: ", "无法撤销：") + e.message); return; }
+    await refresh();
+    toast(L("Undone — they're back on New Additions.", "已撤销——它们回到了新上架。"));
+  });
 }
 
 // ---------- dropdown filters ----------
@@ -821,6 +861,7 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.act === "check-now") checkNow();
   else if (b.dataset.act === "seen-all") markSeen(matchingKeys.slice());
   else if (b.dataset.seen) markSeen([b.dataset.seen]);
+  else if (b.dataset.storePw) enterStorePassword(b.dataset.storePw);
   else if (b.dataset.collect) openCollectionPicker(b, [b.dataset.collect], refreshStars);
   else if (b.dataset.act === "catalog") openCatalog(false);
   else if (b.dataset.act === "catalog-win") openCatalog(true);

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,6 +24,9 @@ type App struct {
 	lib     *Library
 	crawl   *Crawler
 	check   *NewChecker
+	// Store passwords already tried from Yupoo's cookie (RememberTypedPassword), so each is checked once.
+	pwMu    sync.Mutex
+	pwTried map[string]bool
 	token   string
 	baseURL string
 }
@@ -114,7 +118,7 @@ func StartApp() (*App, error) {
 	// A few seconds after opening, look through your stores for new items (see newcheck.go).
 	go func() {
 		time.Sleep(8 * time.Second)
-		app.check.Start()
+		app.check.Start(nil)
 	}()
 
 	addr := "127.0.0.1:0"
@@ -224,14 +228,33 @@ func (a *App) routes() http.Handler {
 		return a.check.Status(), nil
 	}))
 	mux.HandleFunc("POST /api/new-check", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
-		return a.check.Start(), nil
+		return a.check.Start(nil), nil
+	}))
+	// "🔒 Needs a password" → Enter password: checked with Yupoo, saved, then that store is checked.
+	mux.HandleFunc("POST /api/store-password", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in struct{ Store, Password string }
+		if err := decode(r, &in); err != nil {
+			return nil, err
+		}
+		if err := a.EnterStorePassword(in.Store, in.Password); err != nil {
+			return nil, err
+		}
+		return a.check.Status(), nil
 	}))
 	mux.HandleFunc("POST /api/new-seen", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 		var in struct{ Keys []string }
 		if err := decode(r, &in); err != nil {
 			return nil, err
 		}
-		return map[string]int{"changed": a.lib.MarkSeen(in.Keys)}, nil
+		was := a.lib.MarkSeen(in.Keys)
+		return map[string]interface{}{"changed": len(was), "was": was}, nil
+	}))
+	mux.HandleFunc("POST /api/new-unseen", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in struct{ Items map[string]int64 }
+		if err := decode(r, &in); err != nil {
+			return nil, err
+		}
+		return map[string]int{"changed": a.lib.MarkUnseen(in.Items)}, nil
 	}))
 	mux.HandleFunc("POST /api/save-albums", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 		var in []AlbumIn

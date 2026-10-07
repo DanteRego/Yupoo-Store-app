@@ -233,3 +233,10 @@ button.primary { background: var(--green); color: #fff; font-weight: 600; }
 .newstatus.busy { color: var(--accent); }
 .newbadge { position: absolute; left: 6px; top: 6px; background: #e8452c; color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .04em; padding: 2px 7px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
 .selecting .newbadge { left: 40px; }
+/* "🔒 Needs a password" list under New Additions */
+.locked { margin: 6px 0 2px; padding: 8px; border: 1px dashed var(--line); border-radius: 8px; }
+.lockhead { font-size: 12px; font-weight: 600; color: var(--warn); margin-bottom: 4px; }
+.lockrow { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 13px; }
+.lockrow .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lockrow button { padding: 3px 8px; font-size: 12px; background: var(--green); color: #fff; flex-shrink: 0; }
+.warnmark { color: var(--warn); }

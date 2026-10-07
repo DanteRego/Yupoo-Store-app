@@ -45,6 +45,8 @@ const I18N_ZH = {
   "⟳ Check now": "⟳ 立即检查", "Look through your stores for new items again": "再检查一次店铺的新品", "◀ All items": "◀ 全部商品",
   "Take these items off New Additions (they stay in your library)": "把这些商品移出新上架（它们仍在图库里）", "NEW": "新",
   "Seen it — take it off New Additions (it stays in your library)": "看过了——移出新上架（仍在图库里）", "Show": "查看",
+  "Enter password": "输入密码", "New password": "新密码",
+  "The check can't see inside these stores without their password": "没有密码，检查功能看不到这些店铺里的商品",
   // filters & sorting
   "Search items — name, team, season, store or Chinese title": "搜索商品——名称、球队、赛季、店铺或中文标题",
   "Any category": "全部分类", "Any brand": "全部品牌", "Any team": "全部球队", "Any season": "全部赛季",
