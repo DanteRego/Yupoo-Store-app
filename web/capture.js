@@ -60,8 +60,11 @@
     // ---------- reading albums from a page ----------
     function extractAlbums(doc) {
       const out = new Map();
-      doc.querySelectorAll('a[href*="/albums/"]').forEach((a) => {
-        const href = a.getAttribute("href") || "";
+      // A password-locked album has no href: its link is in data-href, its title says only
+      // "加密相册" (locked album), and the real name is in the album__title next to it.
+      doc.querySelectorAll('a[href*="/albums/"], a[data-href*="/albums/"]').forEach((a) => {
+        const locked = !a.getAttribute("href");
+        const href = a.getAttribute("href") || a.getAttribute("data-href") || "";
         const m = href.match(/\/albums\/(\d+)/);
         if (!m) return;
         const img = a.querySelector("img");
@@ -69,7 +72,7 @@
         const id = m[1];
         const titleEl = a.querySelector('[class*="title"]') ||
           (a.parentElement && a.parentElement.querySelector('[class*="title"]'));
-        const title = clean(a.getAttribute("title") || (titleEl && titleEl.textContent) ||
+        const title = clean((!locked && a.getAttribute("title")) || (titleEl && titleEl.textContent) ||
           img.getAttribute("alt") || a.textContent);
         const cover = absUrl(img.getAttribute("data-origin-src") || img.getAttribute("data-src") ||
           img.getAttribute("src") || "");

@@ -484,7 +484,7 @@ function cardNames(p, a) {
 // The ☆ on each card: filled in gold when the item is in one of your collections.
 function starButton(key) {
   const cols = collectionsOf(key);
-  const tip = cols.length ? L("In: ", "在：") + cols.map((c) => c.name).join(", ") + L(" — click to change", "——点击修改") : t("Add to a collection (Catalog)");
+  const tip = cols.length ? L("In: ", "在：") + cols.map((c) => c.name).join(", ") + L(" — click to change", "——点击修改") : t("Add to a collection (Wishlist)");
   return `<button class="star ${cols.length ? "on" : ""}" data-collect="${esc(key)}" title="${esc(tip)}">${cols.length ? "★" : "☆"}</button>`;
 }
 // After a collection change, just redraw the stars (no need to reload the whole library).
@@ -653,7 +653,7 @@ async function removeStore(store) {
   const saving = !!(crawl && crawl.running && crawl.store === store);
   const msg = L(`Remove the store “${name}” from your library?\n\n` +
     `This deletes all ${items.length.toLocaleString()} item${items.length === 1 ? "" : "s"} saved from it, and their photos.` +
-    (inCollections ? `\n${inCollections} of them ${inCollections === 1 ? "is" : "are"} in your Catalog collections and will be taken out of them too.` : "") +
+    (inCollections ? `\n${inCollections} of them ${inCollections === 1 ? "is" : "are"} in your Wishlist collections and will be taken out of them too.` : "") +
     (saving ? `\n\n“Save whole store” is still saving this store — it will be stopped first.` : "") +
     `\n\nThis can't be undone. (Tip: click Backup first if you might want them back.)`,
     `要从图库删除店铺“${name}”吗？\n\n` +
@@ -726,36 +726,6 @@ async function setStoreCategory(store) {
   await refresh();
 }
 
-
-async function exportCsv() {
-  const rows = [["Name", "Category", "Subcategory", "Brand", "Team", "Season", "Kit type", "Extras", "Store", "Original title", "Photos", "Album link", "Saved"]];
-  filtered().forEach((a) => {
-    const p = info(a);
-    rows.push([p.english, p.category, p.sub, p.brand, p.team || "", p.season || "", p.kit || "", p.extras.join(", "),
-      storeName(a.store), a.title, a.count || "", a.link, fmtDate(a.firstSeen)]);
-  });
-  const content = "﻿" + rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\r\n");
-  try {
-    const res = await call("POST", "/api/save-file", { name: `yupoo-library-${today()}.csv`, content });
-    toast(L(`Saved ${rows.length - 1} items to ${res.path}`, `已把 ${num(rows.length - 1)} 件保存到 ${res.path}`));
-  } catch (e) { toast(L("Couldn't save the CSV: ", "无法保存 CSV：") + e.message); }
-}
-
-async function backup() {
-  toast(L("Making a backup…", "正在备份…"));
-  try {
-    const res = await call("POST", "/api/backup");
-    toast(L(`Backup saved to ${res.path}`, `备份已保存到 ${res.path}`));
-  } catch (e) { toast(L("Backup failed: ", "备份失败：") + e.message); }
-}
-
-async function restore(file) {
-  try {
-    const res = await call("POST", "/api/restore", await file.arrayBuffer(), true);
-    toast(L(`Restore finished — ${res.added} items added.`, `恢复完成——新增 ${num(res.added)} 件。`));
-    await refresh();
-  } catch (e) { toast(L("That file isn't a Yupoo Library backup (.zip).", "这个文件不是 Yupoo 图库的备份（.zip）。")); }
-}
 
 // Turns pasted text into a Yupoo store address (or null): adds https://, and switches
 // x.yupoo.com/photos/<store>/... to the usual <store>.x.yupoo.com/... style.
@@ -886,8 +856,6 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.remove) removeKit(b.dataset.remove);
   else if (b.dataset.act === "refresh") refreshButton(b);
   else if (b.dataset.act === "update") checkForUpdates();
-  else if (b.dataset.act === "csv") exportCsv();
-  else if (b.dataset.act === "backup") backup();
 });
 $("form.go").addEventListener("submit", (e) => { e.preventDefault(); openLink($(".link").value); });
 $(".link").addEventListener("input", updatePasteHint);
@@ -935,7 +903,6 @@ $(".autosave").addEventListener("change", (e) => {
   S.settings.autoSave = e.target.checked;
   call("POST", "/api/settings", S.settings);
 });
-$(".restore").addEventListener("change", (e) => { if (e.target.files[0]) restore(e.target.files[0]); e.target.value = ""; });
 
 // When "Save whole store" finishes (it keeps running while you're here), show the new items.
 window.addEventListener("kit-crawl", (e) => {

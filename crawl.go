@@ -306,14 +306,31 @@ func extractAlbums(body, host string) []AlbumIn {
 	store := strings.Split(host, ".")[0]
 	var out []AlbumIn
 	index := map[string]int{}
-	for _, m := range reAnchor.FindAllStringSubmatch(body, -1) {
+	for _, pos := range reAnchor.FindAllStringSubmatchIndex(body, -1) {
+		m := []string{body[pos[0]:pos[1]], body[pos[2]:pos[3]], body[pos[4]:pos[5]]}
 		href := attr(m[1], "href")
+		// A password-locked album has no href: its link is in data-href, its title says only
+		// "加密相册" (locked album), and the real name is in the album__title just after it.
+		locked := href == ""
+		if locked {
+			href = attr(m[1], "data-href")
+		}
 		id := reAlbumID.FindStringSubmatch(href)
 		img := reImg.FindStringSubmatch(m[2])
 		if id == nil || img == nil {
 			continue
 		}
 		title := cleanText(attr(m[1], "title"))
+		if locked {
+			title = ""
+			after := body[pos[1]:min(len(body), pos[1]+800)]
+			if end := strings.Index(after, "<a "); end != -1 {
+				after = after[:end] // only up to the next album
+			}
+			if t := reTitleEl.FindStringSubmatch(after); t != nil {
+				title = cleanText(t[2])
+			}
+		}
 		if title == "" {
 			if t := reTitleEl.FindStringSubmatch(m[2]); t != nil {
 				title = cleanText(t[2])

@@ -101,6 +101,38 @@ async function pollMove() {
   } catch (e) { moveTimer = setTimeout(pollMove, 2000); }
 }
 
+// ---------- your saved data: Export Saved Data, Backup, Restore ----------
+// Export Saved Data: a spreadsheet (CSV) of every item in the library, saved to Downloads.
+async function exportCsv() {
+  const rows = [["Name", "Category", "Subcategory", "Brand", "Team", "Season", "Kit type", "Extras", "Store", "Original title", "Photos", "Album link", "Saved"]];
+  all().sort((a, b) => (b.firstSeen || 0) - (a.firstSeen || 0)).forEach((a) => {
+    const p = info(a);
+    rows.push([p.english, p.category, p.sub, p.brand, p.team || "", p.season || "", p.kit || "", p.extras.join(", "),
+      storeName(a.store), a.title, a.count || "", a.link, fmtDate(a.firstSeen)]);
+  });
+  const content = "﻿" + rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\r\n");
+  try {
+    const res = await call("POST", "/api/save-file", { name: `yupoo-library-${today()}.csv`, content });
+    toast(L(`Saved ${rows.length - 1} items to ${res.path}`, `已把 ${num(rows.length - 1)} 件保存到 ${res.path}`));
+  } catch (e) { toast(L("Couldn't save the file: ", "无法保存文件：") + e.message); }
+}
+
+async function backup() {
+  toast(L("Making a backup…", "正在备份…"));
+  try {
+    const res = await call("POST", "/api/backup");
+    toast(L(`Backup saved to ${res.path}`, `备份已保存到 ${res.path}`));
+  } catch (e) { toast(L("Backup failed: ", "备份失败：") + e.message); }
+}
+
+async function restore(file) {
+  try {
+    const res = await call("POST", "/api/restore", await file.arrayBuffer(), true);
+    await load();
+    toast(L(`Restore finished — ${res.added} items added.`, `恢复完成——新增 ${num(res.added)} 件。`));
+  } catch (e) { toast(L("That file isn't a Yupoo Library backup (.zip).", "这个文件不是 Yupoo 图库的备份（.zip）。")); }
+}
+
 // ---------- 🩺 check-up ----------
 let lastReport = null;
 async function runCheckup(btn) {
@@ -152,6 +184,8 @@ document.addEventListener("click", async (e) => {
   else if (act === "open") { try { await call("POST", "/api/open-folder", { which: b.dataset.which }); } catch (err) { toast(err.message); } }
   else if (act === "diagnose") runCheckup(b);
   else if (act === "copyreport") copyReport();
+  else if (act === "csv") exportCsv();
+  else if (act === "backup") backup();
   else if (act === "update") {
     toast(L("Checking for updates…", "正在检查更新…"));
     try { window.__kitBridge.checkUpdate(); } catch (err) { toast(err.message); }
@@ -160,6 +194,7 @@ document.addEventListener("click", async (e) => {
 document.addEventListener("change", (e) => {
   if (e.target.name === "lang" && e.target.value !== LANG) setLanguage(e.target.value);
 });
+$(".restore").addEventListener("change", (e) => { if (e.target.files[0]) restore(e.target.files[0]); e.target.value = ""; });
 $(".newdir").addEventListener("keydown", (e) => { if (e.key === "Enter") applyFolder(false); });
 
 const canUpdate = !!(window.__kitBridge && window.__kitBridge.checkUpdate);

@@ -58,11 +58,22 @@
       </section>
 
       <section class="setcard">
+        <h2>Your saved data</h2>
+        <p class="hint" data-en="Export Saved Data makes a spreadsheet (CSV) of every item in your library. Backup saves your whole library and photos in one .zip file; Restore adds the items from such a file back in (nothing you have is removed). Files go to your Downloads folder."
+           data-zh="“导出保存的数据”会把图库里的每件商品做成一个表格（CSV）。“备份”会把整个图库和图片存成一个 .zip 文件；“恢复”会把这种文件里的商品加回来（不会删除你已有的东西）。文件保存到你的“下载”文件夹。"></p>
+        <div class="btnrow">
+          <button data-act="csv" class="primary">Export Saved Data</button>
+          <button data-act="backup">Backup</button>
+          <label class="btn">Restore<input type="file" class="restore" accept=".zip,application/zip" hidden></label>
+        </div>
+      </section>
+
+      <section class="setcard">
         <h2>Where things are saved</h2>
         <div class="kv">
           <span data-en="Your library (items, collections, settings)" data-zh="你的图库（商品、收藏夹、设置）"></span>
           <code class="datadir"></code><button data-act="open" data-which="data">📂 Open folder</button>
-          <span data-en="Exports and backups (CSV, Backup, 📤 Export to share)" data-zh="导出和备份（CSV、备份、📤 导出分享）"></span>
+          <span data-en="Exports and backups (Export Saved Data, Backup, 📤 Export to share)" data-zh="导出和备份（导出保存的数据、备份、📤 导出分享）"></span>
           <code class="downloadsdir"></code><button data-act="open" data-which="downloads">📂 Open folder</button>
         </div>
       </section>

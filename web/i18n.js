@@ -26,13 +26,13 @@ function num(n) { return Number(n || 0).toLocaleString(LANG === "zh" ? "zh-CN" :
 
 const I18N_ZH = {
   // header & general
-  "Yupoo Library": "Yupoo 图库", "Refresh": "刷新", "Open": "打开", "📒 Catalog": "📒 收藏目录", "⧉": "⧉",
-  "Auto-save while browsing": "浏览时自动保存", "Export CSV": "导出 CSV", "Backup": "备份", "Restore": "恢复",
+  "Yupoo Library": "Yupoo 图库", "Refresh": "刷新", "Open": "打开", "📒 Wishlist": "📒 愿望清单", "⧉": "⧉",
+  "Auto-save while browsing": "浏览时自动保存", "Export CSV": "导出 CSV", "Backup": "备份", "Restore": "恢复", "Export Saved Data": "导出保存的数据", "Your saved data": "你保存的数据",
   "⬆ Check for updates": "⬆ 检查更新", "⚙ Settings": "⚙ 设置", "◀ Library": "◀ 图库", "⧉ New window": "⧉ 新窗口",
   "🌓 Auto": "🌓 自动", "🌙 Dark": "🌙 深色", "☀️ Light": "☀️ 浅色",
   "Paste a Yupoo link, e.g. shida-tiyu888.x.yupoo.com/albums": "粘贴 Yupoo 链接，例如 shida-tiyu888.x.yupoo.com/albums",
   "Show items saved since this page was opened (e.g. from Save whole store)": "显示打开本页后新保存的商品（例如“保存整个店铺”）",
-  "Your collections, like a wishlist": "你的收藏夹，比如愿望清单", "Open the Catalog in its own window": "在新窗口打开收藏目录",
+  "Your collections of saved items": "你保存的商品收藏夹", "Open the Wishlist in its own window": "在新窗口打开愿望清单",
   "See if a newer version of Yupoo Library is out": "看看 Yupoo 图库有没有新版本", "Light / dark mode": "浅色 / 深色模式",
   "Settings: language, photos folder…": "设置：语言、图片文件夹…",
   // sidebar
@@ -62,11 +62,11 @@ const I18N_ZH = {
   // cards
   "Open album ↗": "打开相册 ↗", "✎ Team": "✎ 球队", "Set the team": "设置球队", "Change what this item is": "修改这个商品的分类",
   "Remove from library": "从图库删除", "your pick": "你的选择", "your fix": "你的修改", "photos": "张图片",
-  "Add to a collection (Catalog)": "加入收藏夹（收藏目录）",
+  "Add to a collection (Wishlist)": "加入收藏夹（愿望清单）",
   // select bar
   "Clear": "清除", "Move to… ▾": "移动到… ▾", "Search or type a new category…": "搜索或输入新分类…",
   "☆ Add to collection ▾": "☆ 加入收藏夹 ▾", "Let sorter decide": "让系统自动分类", "🗑 Remove": "🗑 删除", "Done": "完成",
-  "Add the selected items to a collection in your Catalog": "把选中的商品加入收藏夹",
+  "Add the selected items to a collection in your Wishlist": "把选中的商品加入收藏夹",
   "Forget your picks and let the item sorter decide again": "忘记你的选择，让系统重新自动分类",
   "Undo": "撤销", "Open album": "打开相册",
   // categories
@@ -81,11 +81,11 @@ const I18N_ZH = {
   "Home": "主场", "Away": "客场", "Second Away": "第二客场", "Third": "第三", "Goalkeeper": "守门员", "Training": "训练服",
   "Pre-Match": "赛前服", "Long Sleeve": "长袖", "Retro": "复古", "Kids": "童装", "Fan Version": "球迷版", "Player Version": "球员版",
   // Catalog
-  "Catalog": "收藏目录", "Collections": "收藏夹", "＋ New collection": "＋ 新建收藏夹", "📥 Import a shared collection": "📥 导入别人分享的收藏夹",
+  "Wishlist": "愿望清单", "Collections": "收藏夹", "＋ New collection": "＋ 新建收藏夹", "📥 Import a shared collection": "📥 导入别人分享的收藏夹",
   "✎ Rename": "✎ 重命名", "📤 Export to share": "📤 导出分享", "🗑 Delete collection": "🗑 删除收藏夹",
   "Search this collection — name, team, store, note…": "在这个收藏夹里搜索——名称、球队、店铺、备注…",
   "Recently added": "最近添加", "Oldest first": "最早添加", "Name A–Z": "名称 A–Z", "All collected items": "全部收藏的商品",
-  "Your Catalog": "你的收藏目录", "Add a note — size, quantity, price…": "添加备注——尺码、数量、价格…", "Rename": "重命名",
+  "Your Wishlist": "你的愿望清单", "Add a note — size, quantity, price…": "添加备注——尺码、数量、价格…", "Rename": "重命名",
   "Delete this collection": "删除这个收藏夹", "Change which collections it's in": "修改它所在的收藏夹",
   "Back to the Library (your place there is kept)": "返回图库（会回到你离开时的位置）",
   "Open a collection file someone sent you (made with 📤 Export to share)": "打开别人发给你的收藏夹文件（用“📤 导出分享”生成）",

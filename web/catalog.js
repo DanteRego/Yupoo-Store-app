@@ -88,7 +88,7 @@ function renderSidebar() {
 
 function renderGrid() {
   const c = current();
-  $(".colname").textContent = c ? c.name : t(S.collections.length ? "All collected items" : "Your Catalog");
+  $(".colname").textContent = c ? c.name : t(S.collections.length ? "All collected items" : "Your Wishlist");
   document.querySelectorAll(".needcol").forEach((b) => { b.hidden = !c; });
   $('[data-act="csv"]').hidden = !S.collections.length;
   $(".filters").hidden = !S.collections.length;
@@ -368,4 +368,4 @@ load().then(() => {
   const scroll = restoreView();
   render();
   $("main").scrollTop = scroll;
-}).catch((e) => toast(L("Couldn't load your Catalog: ", "无法加载你的收藏目录：") + e.message));
+}).catch((e) => toast(L("Couldn't load your Wishlist: ", "无法加载你的愿望清单：") + e.message));
