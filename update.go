@@ -205,21 +205,6 @@ func CleanupOldVersion() {
 }
 
 // updateMessage is the question shown when a new version is found.
-func updateMessage(rel *Release) string {
-	var b strings.Builder
-	b.WriteString("A new version of Yupoo Library is available: " + rel.Version + "  (you have " + AppVersion + ").\n\n")
-	if notes := trimNotes(rel.Notes); notes != "" {
-		b.WriteString("What's new:\n" + notes + "\n\n")
-	}
-	b.WriteString("Updating only replaces the program itself. Your saved items, collections, notes, photos and " +
-		"settings are kept exactly as they are — they're stored separately and the update doesn't touch them.\n\n")
-	if rel.ExeURL == "" {
-		b.WriteString("Open the download page now?")
-	} else {
-		b.WriteString("Update now? The app will restart in a few seconds.")
-	}
-	return b.String()
-}
 
 func trimNotes(s string) string {
 	s = strings.ReplaceAll(strings.TrimSpace(s), "\r\n", "\n")
@@ -227,4 +212,34 @@ func trimNotes(s string) string {
 		s = string(r[:600]) + "…"
 	}
 	return s
+}
+
+// uiLang returns the app's language ("en" or "zh"); main_windows.go points it at your settings.
+var uiLang = func() string { return "en" }
+
+// tr picks the English or Chinese wording for the update messages.
+func tr(en, zh string) string {
+	if uiLang() == "zh" {
+		return zh
+	}
+	return en
+}
+
+// updateMessage is the question shown when a new version is found.
+func updateMessage(rel *Release) string {
+	var b strings.Builder
+	b.WriteString(tr("A new version of Yupoo Library is available: "+rel.Version+"  (you have "+AppVersion+").\n\n",
+		"Yupoo Library 有新版本可用："+rel.Version+"（你现在的版本是 "+AppVersion+"）。\n\n"))
+	if notes := trimNotes(rel.Notes); notes != "" {
+		b.WriteString(tr("What's new:\n", "更新内容：\n") + notes + "\n\n")
+	}
+	b.WriteString(tr("Updating only replaces the program itself. Your saved items, collections, notes, photos and "+
+		"settings are kept exactly as they are — they're stored separately and the update doesn't touch them.\n\n",
+		"更新只会替换程序本身。你保存的商品、收藏夹、备注、图片和设置都会原样保留——它们单独存放，更新不会动它们。\n\n"))
+	if rel.ExeURL == "" {
+		b.WriteString(tr("Open the download page now?", "现在打开下载页面吗？"))
+	} else {
+		b.WriteString(tr("Update now? The app will restart in a few seconds.", "现在更新吗？程序会在几秒钟后重新启动。"))
+	}
+	return b.String()
 }

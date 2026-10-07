@@ -27,6 +27,11 @@ USING IT
                         round badge to bring it back, Open store goes back)
                         (about 2 seconds per page so Yupoo doesn't block you)
     Library           - back to your library
+- ⚙ Settings (top right): language (English / 中文), where cover photos are kept
+  (Browse… to pick another folder; your photos are moved there for you), and where
+  your library and exports are saved, with "Open folder" buttons.
+- Pasting a link for a store you already have? The box tells you straight away
+  ("Already in your library … — 1,234 items"), so you don't open it twice.
 - In the library:
     Categories - what each item is (Shirts › Football Kit, Shoes › Sneakers…);
                ▸ opens or folds a category's subcategories

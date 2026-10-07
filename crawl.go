@@ -19,17 +19,19 @@ import (
 
 // CrawlStatus is what the progress bar shows. The page reads it about once a second.
 type CrawlStatus struct {
-	Active   bool   `json:"active"`  // there is something to show (running, or finished and not dismissed)
-	Running  bool   `json:"running"` // still saving
-	Host     string `json:"host"`
-	Store    string `json:"store"`
-	Link     string `json:"link"` // where "Open store" goes
-	Page     int    `json:"page"`
-	MaxPage  int    `json:"maxPage"`
-	Seen     int    `json:"seen"`
-	New      int    `json:"new"`
-	Msg      string `json:"msg"` // set when finished: done / stopped / Yupoo stopped answering
-	Failed   bool   `json:"failed"`
+	Active  bool   `json:"active"`  // there is something to show (running, or finished and not dismissed)
+	Running bool   `json:"running"` // still saving
+	Host    string `json:"host"`
+	Store   string `json:"store"`
+	Link    string `json:"link"` // where "Open store" goes
+	Page    int    `json:"page"`
+	MaxPage int    `json:"maxPage"`
+	Seen    int    `json:"seen"`
+	New     int    `json:"new"`
+	Msg     string `json:"msg"` // set when finished: done / stopped / Yupoo stopped answering
+	Failed  bool   `json:"failed"`
+	// Kind says which finished message Msg is ("done", "stopped", "blocked", "empty"), so the pages can show it in your language.
+	Kind     string `json:"kind,omitempty"`
 	Started  int64  `json:"started"`
 	Finished int64  `json:"finished"`
 	// How the progress is being shown, so the next page can carry on the same way.
@@ -139,9 +141,9 @@ func (c *Crawler) update(f func(s *CrawlStatus)) {
 	f(&c.st)
 }
 
-func (c *Crawler) finish(msg string, failed bool) {
+func (c *Crawler) finish(kind, msg string, failed bool) {
 	c.update(func(s *CrawlStatus) {
-		s.Running, s.Msg, s.Failed, s.Finished = false, msg, failed, time.Now().UnixMilli()
+		s.Running, s.Msg, s.Kind, s.Failed, s.Finished = false, msg, kind, failed, time.Now().UnixMilli()
 	})
 }
 
@@ -175,7 +177,7 @@ func (c *Crawler) run(list *url.URL, cookie string, stop chan struct{}) {
 	stopped := func() bool {
 		select {
 		case <-stop:
-			c.finish("Stopped — "+strconv.Itoa(added)+" new items saved.", false)
+			c.finish("stopped", "Stopped — "+strconv.Itoa(added)+" new items saved.", false)
 			return true
 		default:
 			return false
@@ -188,7 +190,7 @@ func (c *Crawler) run(list *url.URL, cookie string, stop chan struct{}) {
 		c.update(func(s *CrawlStatus) { s.Page = page })
 		body, err := fetchPage(pageURLFor(list, page), origin+"/", cookie)
 		if err != nil {
-			c.finish("Yupoo stopped answering on page "+strconv.Itoa(page)+". Wait a minute, then try again — saved items are kept.", true)
+			c.finish("blocked", "Yupoo stopped answering on page "+strconv.Itoa(page)+". Wait a minute, then try again — saved items are kept.", true)
 			return
 		}
 		if page == 1 {
@@ -204,9 +206,9 @@ func (c *Crawler) run(list *url.URL, cookie string, stop chan struct{}) {
 		done := "Done — " + strconv.Itoa(seen) + " items in this store, " + strconv.Itoa(added) + " new."
 		if len(found) == 0 || sig == prevSig {
 			if page == 1 {
-				c.finish("Couldn't find any items on this store's pages.", true)
+				c.finish("empty", "Couldn't find any items on this store's pages.", true)
 			} else {
-				c.finish(done, false)
+				c.finish("done", done, false)
 			}
 			return
 		}
@@ -215,7 +217,7 @@ func (c *Crawler) run(list *url.URL, cookie string, stop chan struct{}) {
 		seen += len(found)
 		c.update(func(s *CrawlStatus) { s.Seen, s.New = seen, added })
 		if (maxPage > 0 && page >= maxPage) || page >= 500 {
-			c.finish("Done — "+strconv.Itoa(seen)+" items in this store, "+strconv.Itoa(added)+" new.", false)
+			c.finish("done", "Done — "+strconv.Itoa(seen)+" items in this store, "+strconv.Itoa(added)+" new.", false)
 			return
 		}
 		prevSig = sig

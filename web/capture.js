@@ -15,6 +15,7 @@
     window.__kitLibraryCapture = true;
 
     const bridge = window.__kitBridge;
+    const tr = (en, zh) => (window.__kitLang === "zh" ? zh : en); // English or Chinese, per your settings
     const HOST = location.hostname;
     const STORE = HOST.split(".")[0];
 
@@ -187,8 +188,9 @@
       let msg;
       if (notice) msg = notice;
       else if (s) msg = s.running ? crawl.detail(s) : s.msg;
-      else if (!settings.autoSave) msg = "Auto-save is off";
-      else msg = savedThisPage ? `✓ ${savedThisPage} item${savedThisPage === 1 ? "" : "s"} saved from this page` : "Yupoo Library";
+      else if (!settings.autoSave) msg = tr("Auto-save is off", "自动保存已关闭");
+      else msg = savedThisPage ? tr(`✓ ${savedThisPage} item${savedThisPage === 1 ? "" : "s"} saved from this page`, `✓ 本页已保存 ${savedThisPage} 件`)
+        : tr("Yupoo Library", "Yupoo 图库");
       $(".msg").textContent = msg;
       const running = !!(s && s.running);
       $(".prog").hidden = !running;
@@ -200,7 +202,14 @@
         $(".pct").hidden = f == null;
       }
       $('[data-act="dismiss"]').hidden = !(s && !s.running) || !!notice;
-      $('[data-act="store"]').textContent = running ? "Stop" : "Save whole store";
+      $('[data-act="store"]').textContent = running ? tr("Stop", "停止") : tr("Save whole store", "保存整个店铺");
+      // Labels in the app's language (known once the settings have loaded).
+      $('[data-act="page"]').textContent = tr("Save this page", "保存本页");
+      $('[data-act="open"]').textContent = tr("Library", "图库");
+      $('[data-act="dismiss"]').title = tr("Close this message", "关闭这条消息");
+      const back = backShadow.querySelector("button");
+      back.textContent = tr("◀ Back", "◀ 返回");
+      back.title = tr("Go back to the previous page", "返回上一页");
       $('[data-act="page"]').hidden = settings.autoSave;
     }
 
@@ -224,6 +233,7 @@
     let moTimer = null;
     (async () => {
       try { settings = Object.assign({ autoSave: true }, await bridge.settings()); } catch (e) {}
+      window.__kitLang = settings.language === "zh" ? "zh" : "en"; // also used by the progress card (crawlbar.js)
       if (settings.autoSave) await captureThisPage(false);
       renderPill();
       new MutationObserver(() => {

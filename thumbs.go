@@ -45,7 +45,7 @@ func (l *Library) thumbWorker() {
 	client := &http.Client{Timeout: 25 * time.Second}
 	for job := range l.thumbs {
 		p := l.thumbPath(job.key)
-		if _, err := os.Stat(p); err == nil {
+		if _, ok := l.findThumb(filepath.Base(p)); ok {
 			continue
 		}
 		data, err := fetchImage(client, job.cover, "https://"+job.host+"/")
@@ -90,7 +90,13 @@ var (
 // reached it yet, the photo is fetched right away so the library never waits.
 func (l *Library) EnsureThumb(name string) ([]byte, error) {
 	name = unsafeChars.ReplaceAllString(name, "_")
-	p := filepath.Join(l.thumbDir, name)
+	p, ok := l.findThumb(name)
+	if ok {
+		if b, err := os.ReadFile(p); err == nil {
+			return b, nil
+		}
+	}
+	p = filepath.Join(l.ThumbDir(), name)
 	if b, err := os.ReadFile(p); err == nil {
 		return b, nil
 	}

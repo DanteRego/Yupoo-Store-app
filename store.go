@@ -48,6 +48,12 @@ type Settings struct {
 	Theme string `json:"theme,omitempty"`
 	// SidebarWidth is the left sidebar's width in pixels, set by dragging its edge (0 = normal).
 	SidebarWidth int `json:"sidebarWidth,omitempty"`
+	// Language of the app's buttons and messages: "en" (default) or "zh" (中文). Set on the ⚙ Settings page.
+	Language string `json:"language,omitempty"`
+	// ThumbsDir is the folder you chose for cover photos on the Settings page ("" = the default:
+	// M:\Yupoo Library\Thumbnails if the M: drive is there, otherwise next to library.json).
+	// Only changed through SetThumbDir, which can also move the photos.
+	ThumbsDir string `json:"thumbsDir,omitempty"`
 }
 
 type libraryFile struct {
@@ -72,22 +78,25 @@ type thumbJob struct {
 type Library struct {
 	mu        sync.Mutex
 	dir       string
-	thumbDir  string
 	data      libraryFile
 	version   int64
 	saveTimer *time.Timer
 	thumbs    chan thumbJob
+
+	// The photos folder can change while the app runs (Settings page), so it has its own lock.
+	// While photos are being moved, moveFrom is the old folder (still checked for photos).
+	tmu        sync.RWMutex
+	thumbDir   string
+	defaultDir string
+	moveFrom   string
+	move       ThumbMove
 }
 
 func OpenLibrary(dir, thumbDir string) (*Library, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(thumbDir, 0o755); err != nil {
-		return nil, err
-	}
-	l := &Library{dir: dir, thumbDir: thumbDir, thumbs: make(chan thumbJob, 20000)}
-	l.moveOldThumbs()
+	l := &Library{dir: dir, thumbDir: thumbDir, defaultDir: thumbDir, thumbs: make(chan thumbJob, 20000)}
 	l.data = libraryFile{Albums: map[string]*Album{}, Aliases: map[string]string{}, Settings: Settings{AutoSave: true}}
 	if b, err := os.ReadFile(l.file()); err == nil {
 		if err := json.Unmarshal(b, &l.data); err != nil {
@@ -95,6 +104,16 @@ func OpenLibrary(dir, thumbDir string) (*Library, error) {
 			_ = os.Rename(l.file(), l.file()+".broken-"+time.Now().Format("20060102-150405"))
 		}
 	}
+	// A photos folder chosen on the Settings page wins over the default (unless a test sets one).
+	if chosen := l.data.Settings.ThumbsDir; chosen != "" && os.Getenv("KIT_THUMBS_DIR") == "" {
+		if err := os.MkdirAll(chosen, 0o755); err == nil {
+			l.thumbDir = chosen
+		}
+	}
+	if err := os.MkdirAll(l.thumbDir, 0o755); err != nil {
+		return nil, err
+	}
+	l.moveOldThumbs()
 	if l.data.Albums == nil {
 		l.data.Albums = map[string]*Album{}
 	}
@@ -121,7 +140,46 @@ func (l *Library) file() string { return filepath.Join(l.dir, "library.json") }
 var unsafeChars = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
 func (l *Library) thumbPath(key string) string {
-	return filepath.Join(l.thumbDir, unsafeChars.ReplaceAllString(key, "_"))
+	return filepath.Join(l.ThumbDir(), unsafeChars.ReplaceAllString(key, "_"))
+}
+
+// ThumbDir is the folder photos are saved in right now.
+func (l *Library) ThumbDir() string {
+	l.tmu.RLock()
+	defer l.tmu.RUnlock()
+	return l.thumbDir
+}
+
+// findThumb returns where a photo file is: the photos folder, or — while photos are being
+// moved to a new folder — the old one. ok is false if it isn't saved yet.
+func (l *Library) findThumb(name string) (string, bool) {
+	l.tmu.RLock()
+	dir, from := l.thumbDir, l.moveFrom
+	l.tmu.RUnlock()
+	p := filepath.Join(dir, name)
+	if _, err := os.Stat(p); err == nil {
+		return p, true
+	}
+	if from != "" {
+		if q := filepath.Join(from, name); fileExists(q) {
+			return q, true
+		}
+	}
+	return p, false
+}
+
+func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
+
+// removeThumb deletes a saved photo (from both folders while a move is running).
+func (l *Library) removeThumb(key string) {
+	name := unsafeChars.ReplaceAllString(key, "_")
+	l.tmu.RLock()
+	dir, from := l.thumbDir, l.moveFrom
+	l.tmu.RUnlock()
+	_ = os.Remove(filepath.Join(dir, name))
+	if from != "" {
+		_ = os.Remove(filepath.Join(from, name))
+	}
 }
 
 // moveOldThumbs carries photos from the old thumbs folder (next to library.json)
@@ -155,7 +213,7 @@ func (l *Library) queueThumb(a *Album) {
 	if a.Cover == "" {
 		return
 	}
-	if _, err := os.Stat(l.thumbPath(a.Key)); err == nil {
+	if _, ok := l.findThumb(unsafeChars.ReplaceAllString(a.Key, "_")); ok {
 		return
 	}
 	select {
@@ -235,7 +293,7 @@ func (l *Library) Remove(keys []string) {
 	defer l.mu.Unlock()
 	for _, k := range keys {
 		delete(l.data.Albums, k)
-		_ = os.Remove(l.thumbPath(k))
+		l.removeThumb(k)
 	}
 	l.forgetInCollections(keys)
 	l.scheduleSave()
@@ -254,7 +312,7 @@ func (l *Library) RemoveStore(store string) int {
 	}
 	for _, k := range keys {
 		delete(l.data.Albums, k)
-		_ = os.Remove(l.thumbPath(k))
+		l.removeThumb(k)
 	}
 	l.forgetInCollections(keys)
 	delete(l.data.StoreNames, store)
@@ -326,8 +384,11 @@ func (l *Library) SetStoreCategory(store, category string) {
 }
 
 func (l *Library) SetSettings(s Settings) {
+	// The photos folder only changes through SetThumbDir (it may need to move the photos),
+	// so a page saving its other settings never undoes it.
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	s.ThumbsDir = l.data.Settings.ThumbsDir
 	l.data.Settings = s
 	l.scheduleSave()
 }
@@ -376,10 +437,11 @@ func (l *Library) WriteBackup(w io.Writer) error {
 	if err := add("library.json", l.file()); err != nil {
 		return err
 	}
-	entries, _ := os.ReadDir(l.thumbDir)
+	thumbDir := l.ThumbDir()
+	entries, _ := os.ReadDir(thumbDir)
 	for _, e := range entries {
 		if !e.IsDir() && !strings.HasSuffix(e.Name(), ".tmp") {
-			if err := add("thumbs/"+e.Name(), filepath.Join(l.thumbDir, e.Name())); err != nil {
+			if err := add("thumbs/"+e.Name(), filepath.Join(thumbDir, e.Name())); err != nil {
 				return err
 			}
 		}
@@ -408,7 +470,7 @@ func (l *Library) Restore(zipBytes []byte) (int, error) {
 			}
 		case strings.HasPrefix(f.Name, "thumbs/"):
 			name := unsafeChars.ReplaceAllString(strings.TrimPrefix(f.Name, "thumbs/"), "_")
-			p := filepath.Join(l.thumbDir, name)
+			p := filepath.Join(l.ThumbDir(), name)
 			if _, err := os.Stat(p); err != nil {
 				_ = os.WriteFile(p, b, 0o644)
 			}

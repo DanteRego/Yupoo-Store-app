@@ -27,13 +27,26 @@
 
   // Pages done so far, as 0–1, or null when the number of pages isn't known.
   function fraction(s) {
-    if (!s.running && !s.failed && s.msg && s.msg.startsWith("Done")) return 1;
+    if (!s.running && !s.failed && (s.kind === "done" || (s.msg && s.msg.startsWith("Done")))) return 1;
     if (!s.maxPage) return null;
     return Math.min(1, (s.running ? s.page - 1 : s.page) / s.maxPage);
   }
+  // English or Chinese (the app's language is in window.__kitLang: set by i18n.js on the app's
+  // pages, and by capture.js on Yupoo pages once the settings have loaded).
+  const tr = (en, zh) => (window.__kitLang === "zh" ? zh : en);
+  // The finished message, in your language (the app sends the English one plus its kind).
+  function finishedText(s) {
+    if (window.__kitLang !== "zh") return s.msg;
+    if (s.kind === "done") return `完成——这个店铺共 ${s.seen} 件，其中 ${s.new} 件是新的。`;
+    if (s.kind === "stopped") return `已停止——保存了 ${s.new} 件新商品。`;
+    if (s.kind === "blocked") return `Yupoo 在第 ${s.page} 页停止响应。请等一分钟再试——已保存的商品会保留。`;
+    if (s.kind === "empty") return "在这个店铺的页面上没有找到商品。";
+    return s.msg;
+  }
   function detail(s) {
-    if (!s.running) return s.msg;
-    return `Page ${s.page}${s.maxPage ? " of " + s.maxPage : ""} · ${s.seen} items · ${s.new} new`;
+    if (!s.running) return finishedText(s);
+    return tr(`Page ${s.page}${s.maxPage ? " of " + s.maxPage : ""} · ${s.seen} items · ${s.new} new`,
+      `第 ${s.page}${s.maxPage ? " / " + s.maxPage : ""} 页 · ${s.seen} 件 · ${s.new} 件新的`);
   }
 
   async function poll() {
@@ -133,21 +146,23 @@
         ? `<button class="badge ${unknown ? "unknown" : ""}" data-act="expand"><span></span></button>`
         : `<div class="card ${state}">
           <div class="top"><span class="dot"></span><span class="title"></span>
-            <button class="icon" data-act="min" title="Shrink">–</button>
-            ${st.running ? "" : `<button class="icon" data-act="dismiss" title="Close">✕</button>`}</div>
+            <button class="icon" data-act="min" title="${tr("Shrink", "缩小")}">–</button>
+            ${st.running ? "" : `<button class="icon" data-act="dismiss" title="${tr("Close", "关闭")}">✕</button>`}</div>
           <div class="track"><div class="fill ${unknown ? "unknown" : ""}"></div></div>
           <div class="detail"></div>
-          <div class="btns"><button class="btn main" data-act="open">Open store</button>
-            ${st.running ? `<button class="btn" data-act="stop">Stop</button>` : ""}</div></div>`;
+          <div class="btns"><button class="btn main" data-act="open">${tr("Open store", "打开店铺")}</button>
+            ${st.running ? `<button class="btn" data-act="stop">${tr("Stop", "停止")}</button>` : ""}</div></div>`;
     }
     if (st.uiMin) {
       const badge = shadow.querySelector(".badge");
       const ring = st.failed ? "#f0b35a" : "#3ccf86";
       badge.style.background = `conic-gradient(${ring} ${pct == null ? 90 : pct * 3.6}deg, rgba(60,207,134,.18) 0)`;
-      badge.title = `${st.running ? "Saving" : "Saved"} ${st.store} — ${detail(st)}\nClick to open`;
+      badge.title = tr(`${st.running ? "Saving" : "Saved"} ${st.store} — ${detail(st)}\nClick to open`,
+        `${st.running ? "正在保存" : "已保存"} ${st.store} — ${detail(st)}\n点击展开`);
       badge.firstElementChild.textContent = st.running ? (pct == null ? "…" : pct + "%") : st.failed ? "!" : "✓";
     } else {
-      const title = st.running ? `Saving ${st.store}` : st.failed ? `${st.store} — stopped early` : `Finished saving ${st.store}`;
+      const title = st.running ? tr(`Saving ${st.store}`, `正在保存 ${st.store}`)
+        : st.failed ? tr(`${st.store} — stopped early`, `${st.store} — 提前停止了`) : tr(`Finished saving ${st.store}`, `${st.store} 已保存完成`);
       const t = shadow.querySelector(".title");
       t.textContent = t.title = title;
       shadow.querySelector(".fill").style.width = (pct == null ? 0 : pct) + "%";

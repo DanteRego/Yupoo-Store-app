@@ -132,7 +132,11 @@ func (a *App) routes() http.Handler {
 				return
 			}
 			if strings.HasSuffix(name, ".html") {
-				b = []byte(strings.Replace(string(b), "{{TOKEN}}", a.token, 1))
+				lang := a.lib.GetSettings().Language
+				if lang != "zh" {
+					lang = "en"
+				}
+				b = []byte(strings.NewReplacer("{{TOKEN}}", a.token, "{{LANG}}", lang).Replace(string(b)))
 			}
 			w.Header().Set("Content-Type", ctype)
 			w.Header().Set("Cache-Control", "no-store")
@@ -141,6 +145,9 @@ func (a *App) routes() http.Handler {
 	}
 	mux.HandleFunc("/{$}", static("library.html", "text/html; charset=utf-8"))
 	mux.HandleFunc("/catalog", static("catalog.html", "text/html; charset=utf-8"))
+	mux.HandleFunc("/settings", static("settings.html", "text/html; charset=utf-8"))
+	mux.HandleFunc("/settings.js", static("settings.js", "text/javascript; charset=utf-8"))
+	mux.HandleFunc("/i18n.js", static("i18n.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/teams.js", static("teams.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/categories.js", static("categories.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/brands.js", static("brands.js", "text/javascript; charset=utf-8"))
@@ -280,6 +287,62 @@ func (a *App) routes() http.Handler {
 		}
 		a.lib.SetStoreCategory(in.Store, in.Category)
 		return true, nil
+	}))
+	// ---------- the ⚙ Settings page ----------
+	mux.HandleFunc("GET /api/settings-info", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		dir := a.lib.ThumbDir()
+		return map[string]interface{}{
+			"thumbsDir":        dir,
+			"defaultThumbsDir": a.lib.DefaultThumbDir(),
+			"usingDefault":     strings.EqualFold(filepath.Clean(dir), filepath.Clean(a.lib.DefaultThumbDir())),
+			"photoCount":       countPhotos(dir),
+			"dataDir":          a.lib.dir,
+			"downloadsDir":     downloadsDir(),
+			"move":             a.lib.ThumbMoveStatus(),
+			"canPickFolders":   canPickFolders,
+			"version":          AppVersion,
+		}, nil
+	}))
+	mux.HandleFunc("GET /api/diagnose", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		return a.Diagnose(), nil
+	}))
+	mux.HandleFunc("GET /api/thumbs-move", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		return a.lib.ThumbMoveStatus(), nil
+	}))
+	mux.HandleFunc("POST /api/thumbs-dir", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in struct {
+			Dir           string
+			Default, Move bool
+		}
+		if err := decode(r, &in); err != nil {
+			return nil, err
+		}
+		if err := a.lib.SetThumbDir(in.Dir, in.Default, in.Move); err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"thumbsDir": a.lib.ThumbDir(), "move": a.lib.ThumbMoveStatus()}, nil
+	}))
+	mux.HandleFunc("POST /api/pick-folder", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in struct{ Title string }
+		_ = decode(r, &in)
+		if in.Title == "" {
+			in.Title = "Choose a folder for your cover photos"
+		}
+		p, err := pickFolder(in.Title)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]string{"path": p}, nil
+	}))
+	mux.HandleFunc("POST /api/open-folder", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in struct{ Which string }
+		_ = decode(r, &in)
+		dirs := map[string]string{"thumbs": a.lib.ThumbDir(), "data": a.lib.dir, "downloads": downloadsDir()}
+		dir, ok := dirs[in.Which]
+		if !ok {
+			return nil, errors.New("unknown folder")
+		}
+		return true, openFolder(dir)
 	}))
 	mux.HandleFunc("POST /api/remove-store", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 		var in struct{ Store string }

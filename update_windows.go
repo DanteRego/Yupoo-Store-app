@@ -35,18 +35,18 @@ func offerUpdate(w webview2.WebView, manual bool) {
 	rel, err := CheckForUpdate()
 	if err != nil {
 		if manual {
-			showOnWindow(w, "Yupoo Library", "Couldn't check for updates right now — maybe there's no internet connection, "+
-				"or GitHub is busy. Try again in a minute.\n\n("+err.Error()+")", 0x30)
+			showOnWindow(w, "Yupoo Library", tr("Couldn't check for updates right now — maybe there's no internet connection, or GitHub is busy. Try again in a minute.", "现在无法检查更新——可能没有网络，或者 GitHub 太忙。请过一分钟再试。")+
+				"\n\n("+err.Error()+")", 0x30)
 		}
 		return
 	}
 	if rel == nil {
 		if manual {
-			showOnWindow(w, "Yupoo Library", "You're on the latest version ("+AppVersion+").", 0x40)
+			showOnWindow(w, "Yupoo Library", tr("You're on the latest version ("+AppVersion+").", "你已经是最新版本（"+AppVersion+"）。"), 0x40)
 		}
 		return
 	}
-	if !askYesNo(w, "Update available — Yupoo Library", updateMessage(rel)) {
+	if !askYesNo(w, tr("Update available — Yupoo Library", "有可用更新 — Yupoo Library"), updateMessage(rel)) {
 		return
 	}
 	if rel.ExeURL == "" {
@@ -61,9 +61,10 @@ func offerUpdate(w webview2.WebView, manual bool) {
 		err = InstallUpdate(rel, exe)
 	}
 	if err != nil {
-		showOnWindow(w, "Yupoo Library couldn't update",
-			"The update didn't work, so nothing was changed — this version keeps working as before.\n\n"+
-				"("+err.Error()+")\n\nYou can also download the new version yourself from:\n"+rel.PageURL, 0x30)
+		showOnWindow(w, tr("Yupoo Library couldn't update", "Yupoo Library 无法更新"),
+			tr("The update didn't work, so nothing was changed — this version keeps working as before.",
+				"更新没有成功，所以什么都没有改变——当前版本照常可用。")+
+				"\n\n("+err.Error()+")\n\n"+tr("You can also download the new version yourself from:", "你也可以自己从这里下载新版本：")+"\n"+rel.PageURL, 0x30)
 		return
 	}
 	// Close this window; main() then saves anything not written yet and starts the new version.

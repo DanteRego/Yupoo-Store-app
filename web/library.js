@@ -56,7 +56,7 @@ function renderCats() {
     const open = openCats.has(top);
     if (sub) { if (open) html += item("cat", path, path.split(" › ")[1], counts.get(path), S.cat === path, "sub"); return; }
     const chev = hasSubs.has(top)
-      ? `<button class="chev ${open ? "open" : ""}" data-chev="${esc(top)}" title="${open ? "Hide" : "Show"} subcategories">▸</button>`
+      ? `<button class="chev ${open ? "open" : ""}" data-chev="${esc(top)}" title="${t(open ? "Hide subcategories" : "Show subcategories")}">▸</button>`
       : `<span class="chev-gap"></span>`;
     html += item("cat", path, path, counts.get(path), S.cat === path, "top").replace('<span class="name"', chev + '<span class="name"');
   });
@@ -99,8 +99,10 @@ function vals(a, f) {
   return [a.store];
 }
 function optionLabel(f, v) {
-  if (v === "__unsorted") return "⚠ Kits with no team";
-  if (v === "—") return { brand: "No brand in title", team: "No team", season: "No season", kit: "No kit type", extra: "No extras" }[f];
+  if (v === "__unsorted") return t("⚠ Kits with no team");
+  if (v === "—") return t({ brand: "No brand in title", team: "No team", season: "No season", kit: "No kit type", extra: "No extras" }[f]);
+  if (f === "cat") return tCat(v);
+  if (f === "kit" || f === "extra") return t(v);
   return f === "store" ? storeName(v) : v;
 }
 const KIT_ORDER = ["Home", "Away", "Second Away", "Third", "Goalkeeper", "Training", "Pre-Match"];
@@ -129,7 +131,7 @@ function renderFilters() {
   }
   FILTERS.forEach(({ f, label, any }) => {
     const btn = box.querySelector(`[data-dd-toggle="${f}"]`);
-    btn.textContent = S[f] ? `${label}: ${optionLabel(f, S[f])} ▾` : `${any} ▾`;
+    btn.textContent = S[f] ? `${t(label)}: ${optionLabel(f, S[f])} ▾` : `${t(any)} ▾`;
     btn.classList.toggle("on", !!S[f]);
     btn.title = btn.textContent;
     box.querySelector(`[data-dd="${f}"] .dd-panel`).hidden = openDD !== f;
@@ -150,7 +152,7 @@ function renderOptions(f) {
   });
   if (S[f] && !counts.has(S[f])) counts.set(S[f], 0); // keep your current choice visible
   const any = FILTERS.find((x) => x.f === f).any;
-  let html = q ? "" : item("pick", "", any, total, !S[f]);
+  let html = q ? "" : item("pick", "", t(any), total, !S[f]);
   [...counts.keys()].sort(optionOrder(f)).filter((v) => optionMatches(f, v, q))
     .forEach((v) => { html += item("pick", v, optionLabel(f, v), counts.get(v), S[f] === v, v === "__unsorted" ? "warn" : ""); });
   panel.querySelector(".dd-list").innerHTML = html || `<div class="summary" style="padding:4px 8px">Nothing matches “${esc(q)}”.</div>`;
@@ -221,23 +223,32 @@ function renderGrid() {
   shownKeys = pageItems.map((a) => a.key);
   matchingKeys = list.map((a) => a.key);
   renderSelBar();
-  $(".count").textContent = total ? `${total} items · ${new Set(all().map((a) => a.store)).size} stores` : "";
+  const nStores = new Set(all().map((a) => a.store)).size;
+  $(".count").textContent = total ? L(`${total} items · ${nStores} stores`, `${total} 件 · ${nStores} 个店铺`) : "";
   if (!total) {
     $(".summary").textContent = "";
-    $(".grid").innerHTML = `<div class="empty" style="grid-column:1/-1"><strong>Your library is empty</strong>
+    $(".grid").innerHTML = L(`<div class="empty" style="grid-column:1/-1"><strong>Your library is empty</strong>
       <ol>
         <li>Paste a Yupoo link in the box at the top and press <b>Open</b>.</li>
         <li>Browse as normal — every item you see is saved here automatically.</li>
         <li>Press <b>Save whole store</b> in the green bar to grab a supplier's entire catalog.</li>
         <li>Press <b>Library</b> in the green bar to come back here.</li>
-      </ol></div>`;
+      </ol></div>`, `<div class="empty" style="grid-column:1/-1"><strong>你的图库还是空的</strong>
+      <ol>
+        <li>在顶部的框里粘贴一个 Yupoo 链接，然后点<b>打开</b>。</li>
+        <li>像平常一样浏览——你看到的每件商品都会自动保存到这里。</li>
+        <li>点绿色栏里的<b>保存整个店铺</b>，可以一次保存供应商的全部商品。</li>
+        <li>点绿色栏里的<b>图库</b>回到这里。</li>
+      </ol></div>`);
     renderPager(0, 0);
     return;
   }
-  $(".summary").textContent = (list.length > S.perPage ? `Showing ${start + 1}–${start + pageItems.length} of ${list.length.toLocaleString()} items` : `${list.length.toLocaleString()} items`) +
-    (list.length !== total ? ` (${total.toLocaleString()} saved in total)` : "");
+  $(".summary").textContent = (list.length > S.perPage
+    ? L(`Showing ${start + 1}–${start + pageItems.length} of ${list.length.toLocaleString()} items`, `显示第 ${start + 1}–${start + pageItems.length} 件，共 ${num(list.length)} 件`)
+    : L(`${list.length.toLocaleString()} items`, `${num(list.length)} 件`)) +
+    (list.length !== total ? L(` (${total.toLocaleString()} saved in total)`, `（总共保存了 ${num(total)} 件）`) : "");
   if (!list.length) {
-    $(".grid").innerHTML = `<div class="empty" style="grid-column:1/-1">No items match these filters.</div>`;
+    $(".grid").innerHTML = `<div class="empty" style="grid-column:1/-1">${L("No items match these filters.", "没有符合这些筛选条件的商品。")}</div>`;
     renderPager(0, 0);
     return;
   }
@@ -249,7 +260,7 @@ function renderGrid() {
     const b = info(a).brand || "";
     if (i > 0 && (info(pageItems[i - 1]).brand || "") === b) return "";
     const n = brandCounts.get(b) || 0;
-    return `<div class="grouphead"><span>${esc(b || "No brand in title")}</span><span class="c">${n.toLocaleString()} item${n === 1 ? "" : "s"}${i === 0 && start > 0 && (info(list[start - 1]).brand || "") === b ? " · continued" : ""}</span></div>`;
+    return `<div class="grouphead"><span>${esc(b || t("No brand in title"))}</span><span class="c">${L(`${n.toLocaleString()} item${n === 1 ? "" : "s"}`, `${num(n)} 件`)}${i === 0 && start > 0 && (info(list[start - 1]).brand || "") === b ? L(" · continued", " · 续") : ""}</span></div>`;
   };
   $(".grid").innerHTML = pageItems.map((a, i) => {
     const p = info(a);
@@ -257,13 +268,12 @@ function renderGrid() {
       <span class="tick" aria-hidden="true">✓</span>
       <a class="img" href="${esc(a.link)}">
         <img data-key="${esc(a.key)}" data-cover="${esc(a.cover || "")}" alt="" loading="lazy">
-        ${a.count ? `<span class="n">${a.count} photos</span>` : ""}
+        ${a.count ? `<span class="n">${L(`${a.count} photos`, `${a.count} 张图`)}</span>` : ""}
       </a>
       <div class="meta">
-        <div class="catline ${p.category === "Other" ? "unsorted" : ""}">${esc(p.catPath)}${p.brand ? ` · <span class="brand">${esc(p.brand)}</span>` : ""}${p.catEdited ? ` · <span class="tag">your pick</span>` : ""}</div>
-        <div class="en ${p.footballKit && !p.team ? "unsorted" : ""}">${esc(p.english)}</div>
-        ${p.english !== a.title ? `<div class="zh">${esc(a.title)}</div>` : ""}
-        <div class="src">${esc(storeName(a.store))} · saved ${esc(fmtDate(a.firstSeen))}${p.edited ? ` · <span class="tag">your fix</span>` : ""}</div>
+        <div class="catline ${p.category === "Other" ? "unsorted" : ""}">${esc(tCat(p.catPath))}${p.brand ? ` · <span class="brand">${esc(p.brand)}</span>` : ""}${p.catEdited ? ` · <span class="tag">${t("your pick")}</span>` : ""}</div>
+        ${cardNames(p, a)}
+        <div class="src">${esc(storeName(a.store))} · ${L("saved", "保存于")} ${esc(fmtDate(a.firstSeen))}${p.edited ? ` · <span class="tag">${t("your fix")}</span>` : ""}</div>
         <div class="row">
           <a href="${esc(a.link)}">Open album ↗</a>
           ${starButton(a.key)}
@@ -285,12 +295,12 @@ function renderPager(page, pages) {
   if (pages > 1) {
     const nums = new Set([1, pages, page - 2, page - 1, page, page + 1, page + 2].filter((n) => n >= 1 && n <= pages));
     const list = [...nums].sort((a, b) => a - b);
-    html += `<button data-page="${page - 1}" ${page === 1 ? "disabled" : ""} title="Previous page">‹</button>`;
+    html += `<button data-page="${page - 1}" ${page === 1 ? "disabled" : ""} title="${t("Previous page")}">‹</button>`;
     list.forEach((n, i) => {
       if (i && n - list[i - 1] > 1) html += `<span class="gap">…</span>`;
       html += `<button data-page="${n}" class="${n === page ? "on" : ""}">${n}</button>`;
     });
-    html += `<button data-page="${page + 1}" ${page === pages ? "disabled" : ""} title="Next page">›</button>`;
+    html += `<button data-page="${page + 1}" ${page === pages ? "disabled" : ""} title="${t("Next page")}">›</button>`;
   }
   document.querySelectorAll(".pager").forEach((p) => { p.innerHTML = html; });
   $(".perpage").hidden = !pages;
@@ -321,10 +331,20 @@ function restoreView() {
   return v.scroll || 0;
 }
 
+// The names on a card: in English the app's English name first and the supplier's title under it;
+// in Chinese the supplier's original title first and the English name under it.
+function cardNames(p, a) {
+  const warn = p.footballKit && !p.team ? "unsorted" : "";
+  if (LANG === "zh") {
+    return `<div class="en">${esc(a.title)}</div>` + (p.english !== a.title ? `<div class="zh ${warn}">${esc(p.english)}</div>` : "");
+  }
+  return `<div class="en ${warn}">${esc(p.english)}</div>` + (p.english !== a.title ? `<div class="zh">${esc(a.title)}</div>` : "");
+}
+
 // The ☆ on each card: filled in gold when the item is in one of your collections.
 function starButton(key) {
   const cols = collectionsOf(key);
-  const tip = cols.length ? "In: " + cols.map((c) => c.name).join(", ") + " — click to change" : "Add to a collection (Catalog)";
+  const tip = cols.length ? L("In: ", "在：") + cols.map((c) => c.name).join(", ") + L(" — click to change", "——点击修改") : t("Add to a collection (Catalog)");
   return `<button class="star ${cols.length ? "on" : ""}" data-collect="${esc(key)}" title="${esc(tip)}">${cols.length ? "★" : "☆"}</button>`;
 }
 // After a collection change, just redraw the stars (no need to reload the whole library).
@@ -344,7 +364,7 @@ function setSelecting(on) {
   lastPicked = -1;
   document.body.classList.toggle("selecting", on);
   $(".selbtn").classList.toggle("on", on);
-  $(".selbtn").textContent = on ? "☑ Selecting…" : "☑ Select";
+  $(".selbtn").textContent = t(on ? "☑ Selecting…" : "☑ Select");
   renderGrid();
 }
 
@@ -367,9 +387,9 @@ function renderSelBar() {
   bar.hidden = !selecting;
   if (!selecting) return;
   const n = sel.size;
-  $(".selcount").textContent = n ? `${n} selected` : "Click items to select them";
-  $('[data-sel="page"]').textContent = `Select shown (${shownKeys.length})`;
-  $('[data-sel="all"]').textContent = `Select all matching (${matchingKeys.length})`;
+  $(".selcount").textContent = n ? L(`${n} selected`, `已选 ${n} 件`) : L("Click items to select them", "点击商品来选择");
+  $('[data-sel="page"]').textContent = L(`Select shown (${shownKeys.length})`, `选择本页（${shownKeys.length}）`);
+  $('[data-sel="all"]').textContent = L(`Select all matching (${matchingKeys.length})`, `选择全部符合的（${matchingKeys.length}）`);
   $('[data-sel="all"]').hidden = matchingKeys.length <= shownKeys.length;
   bar.querySelectorAll(".needs").forEach((b) => { b.disabled = !n; });
   $(".mv .dd-panel").hidden = !mvOpen || !n;
@@ -383,7 +403,7 @@ function renderMoveOptions() {
   const paths = YO_categoryPaths();
   all().forEach((a) => { const p = info(a).catPath; if (paths.indexOf(p) === -1) paths.push(p); });
   paths.sort((a, b) => catRank(a) - catRank(b) || a.localeCompare(b));
-  const hits = paths.filter((p) => !ql || p.toLowerCase().includes(ql));
+  const hits = paths.filter((p) => !ql || p.toLowerCase().includes(ql) || tCat(p).toLowerCase().includes(ql));
   let html = hits.map((p) => {
     const sub = p.indexOf(" › ") !== -1;
     return `<div class="item ${sub ? "sub" : "top"}" role="button" tabindex="0" data-move="${esc(p)}"><span class="name">${esc(sub ? p.split(" › ")[1] : p)}</span>` +
@@ -391,7 +411,7 @@ function renderMoveOptions() {
   }).join("");
   const typed = q.replace(/\s*[>›]\s*/g, " › ");
   if (q && !paths.some((p) => p.toLowerCase() === typed.toLowerCase())) {
-    html += `<div class="item new" role="button" tabindex="0" data-move="${esc(typed)}"><span class="name">➕ New category “${esc(typed)}”</span></div>`;
+    html += `<div class="item new" role="button" tabindex="0" data-move="${esc(typed)}"><span class="name">${L("➕ New category", "➕ 新分类")} “${esc(typed)}”</span></div>`;
   }
   $(".mv .dd-list").innerHTML = html;
 }
@@ -408,24 +428,26 @@ async function moveSelected(category) {
   });
   try {
     await call("POST", "/api/categories", { keys, category });
-  } catch (e) { toast("Couldn't move them: " + e.message); return; }
+  } catch (e) { toast(L("Couldn't move them: ", "无法移动：") + e.message); return; }
   sel.clear(); mvOpen = false;
   await refresh();
   const where = category ? `to ${category}` : "back to the item sorter";
-  toast(`Moved ${keys.length} item${keys.length === 1 ? "" : "s"} ${where}.`, "Undo", async () => {
+  toast(L(`Moved ${keys.length} item${keys.length === 1 ? "" : "s"} ${where}.`,
+    category ? `已把 ${keys.length} 件移到 ${tCat(category)}。` : `已把 ${keys.length} 件交回系统自动分类。`), "Undo", async () => {
     for (const [old, ks] of before) await call("POST", "/api/categories", { keys: ks, category: old });
     await refresh();
-    toast("Undone.");
+    toast(L("Undone.", "已撤销。"));
   });
 }
 
 async function removeSelected() {
   const keys = [...sel];
-  if (!keys.length || !confirm(`Remove ${keys.length} item${keys.length === 1 ? "" : "s"} from your library?\n\nThis can't be undone.`)) return;
+  if (!keys.length || !confirm(L(`Remove ${keys.length} item${keys.length === 1 ? "" : "s"} from your library?\n\nThis can't be undone.`,
+    `要从图库删除这 ${keys.length} 件吗？\n\n删除后无法撤销。`))) return;
   await call("POST", "/api/remove", { keys });
   sel.clear();
   await refresh();
-  toast(`Removed ${keys.length} items.`);
+  toast(L(`Removed ${keys.length} items.`, `已删除 ${keys.length} 件。`));
 }
 
 function update() { renderCats(); renderStores(); renderFilters(); renderGrid(); }
@@ -448,9 +470,10 @@ async function refreshButton(btn) {
   try {
     await refresh();
     const added = all().length - before;
-    toast(added > 0 ? `${added.toLocaleString()} new item${added === 1 ? "" : "s"} — ${all().length.toLocaleString()} in your library now.`
-      : `Up to date — ${all().length.toLocaleString()} items.`);
-  } catch (e) { toast("Couldn't refresh: " + e.message); }
+    toast(added > 0 ? L(`${added.toLocaleString()} new item${added === 1 ? "" : "s"} — ${all().length.toLocaleString()} in your library now.`,
+      `新增 ${num(added)} 件——图库现在共有 ${num(all().length)} 件。`)
+      : L(`Up to date — ${all().length.toLocaleString()} items.`, `已是最新——共 ${num(all().length)} 件。`));
+  } catch (e) { toast(L("Couldn't refresh: ", "无法刷新：") + e.message); }
   btn.classList.remove("spin");
 }
 
@@ -458,13 +481,15 @@ async function refreshButton(btn) {
 async function editTeam(key) {
   const a = S.lib.albums[key]; if (!a) return;
   const p = info(a);
-  const input = prompt(`Which team is this kit?\n\n${a.title}\n\nType the English team name (e.g. Liverpool). Leave empty to undo your fix.`, p.team || "");
+  const input = prompt(L(`Which team is this kit?\n\n${a.title}\n\nType the English team name (e.g. Liverpool). Leave empty to undo your fix.`,
+    `这件球衣是哪个球队的？\n\n${a.title}\n\n输入球队的英文名（例如 Liverpool）。留空则撤销你的修改。`), p.team || "");
   if (input === null) return;
   const name = input.trim();
   const canon = name ? (YO_canonicalTeam(name, allAliases()) || name) : "";
   const parsedTeam = YO_parse(a.title, matcher).team;
   const seg = YO_guessAlias(a.title);
-  if (canon && seg && !parsedTeam && confirm(`Also treat "${seg}" as ${canon} for every item, in every store?`)) {
+  if (canon && seg && !parsedTeam && confirm(L(`Also treat "${seg}" as ${canon} for every item, in every store?`,
+    `以后在所有店铺里都把“${seg}”当作 ${canon} 吗？`))) {
     S.aliases[seg] = canon;
     await call("POST", "/api/aliases", S.aliases);
   }
@@ -474,7 +499,7 @@ async function editTeam(key) {
 
 async function removeKit(key) {
   const a = S.lib.albums[key]; if (!a) return;
-  if (!confirm(`Remove this item from your library?\n\n${info(a).english}`)) return;
+  if (!confirm(L(`Remove this item from your library?\n\n${info(a).english}`, `要从图库删除这件商品吗？\n\n${a.title}`))) return;
   await call("POST", "/api/remove", { keys: [key] });
   await refresh();
 }
@@ -486,11 +511,16 @@ async function removeStore(store) {
   const inCollections = items.filter((a) => collectionsOf(a.key).length).length;
   const crawl = window.__kitCrawl && window.__kitCrawl.status;
   const saving = !!(crawl && crawl.running && crawl.store === store);
-  const msg = `Remove the store “${name}” from your library?\n\n` +
+  const msg = L(`Remove the store “${name}” from your library?\n\n` +
     `This deletes all ${items.length.toLocaleString()} item${items.length === 1 ? "" : "s"} saved from it, and their photos.` +
     (inCollections ? `\n${inCollections} of them ${inCollections === 1 ? "is" : "are"} in your Catalog collections and will be taken out of them too.` : "") +
     (saving ? `\n\n“Save whole store” is still saving this store — it will be stopped first.` : "") +
-    `\n\nThis can't be undone. (Tip: click Backup first if you might want them back.)`;
+    `\n\nThis can't be undone. (Tip: click Backup first if you might want them back.)`,
+    `要从图库删除店铺“${name}”吗？\n\n` +
+    `这会删除从它保存的全部 ${num(items.length)} 件商品和它们的图片。` +
+    (inCollections ? `\n其中 ${inCollections} 件在你的收藏夹里，也会被移出。` : "") +
+    (saving ? `\n\n“保存整个店铺”还在保存这个店铺——会先停止它。` : "") +
+    `\n\n删除后无法撤销。（提示：如果以后可能还想要，先点“备份”。）`);
   if (!confirm(msg)) return;
   try {
     if (saving) {
@@ -502,12 +532,13 @@ async function removeStore(store) {
     if (S.store === store) S.store = "";
     S.page = 1;
     await refresh();
-    toast(`Removed “${name}” and its ${res.removed.toLocaleString()} item${res.removed === 1 ? "" : "s"}.`);
-  } catch (e) { toast("Couldn't remove the store: " + e.message); }
+    toast(L(`Removed “${name}” and its ${res.removed.toLocaleString()} item${res.removed === 1 ? "" : "s"}.`, `已删除“${name}”和它的 ${num(res.removed)} 件商品。`));
+  } catch (e) { toast(L("Couldn't remove the store: ", "无法删除店铺：") + e.message); }
 }
 
 async function renameStore(store) {
-  const input = prompt(`Rename this store\n\nOriginal name: ${store}\n\nType your own name for it. Leave empty to go back to the original name.`, storeName(store));
+  const input = prompt(L(`Rename this store\n\nOriginal name: ${store}\n\nType your own name for it. Leave empty to go back to the original name.`,
+    `重命名这个店铺\n\n原名：${store}\n\n输入你想用的名字。留空则恢复原名。`), storeName(store));
   if (input === null) return;
   await call("POST", "/api/store-name", { store, name: input.trim() });
   await refresh();
@@ -517,33 +548,39 @@ async function renameStore(store) {
 // Returns the chosen path, "" for "work it out automatically", or null if cancelled.
 function chooseCategory(heading, current, emptyMeans) {
   const paths = YO_categoryPaths();
-  const list = paths.map((p, i) => `${i + 1}. ${p.indexOf(" › ") !== -1 ? "      " + p.split(" › ")[1] : p}`).join("\n");
-  const input = prompt(`${heading}\n\n${list}\n\nType a number, or a name. Leave empty ${emptyMeans}.`, current || "");
+  const list = paths.map((p, i) => `${i + 1}. ${p.indexOf(" › ") !== -1 ? "      " + t(p.split(" › ")[1]) : t(p)}`).join("\n");
+  const input = prompt(`${heading}\n\n${list}\n\n${L("Type a number, or a name.", "输入编号或名称。")} ${emptyMeans}`, current ? tCat(current) : "");
   if (input === null) return null;
-  const t = input.trim();
-  if (!t) return "";
-  if (/^\d+$/.test(t) && paths[+t - 1]) return paths[+t - 1];
-  const low = t.toLowerCase().replace(/\s*[>›]\s*/g, " › ");
-  return paths.find((p) => p.toLowerCase() === low) ||
-    paths.find((p) => p.toLowerCase().endsWith("› " + low)) ||
-    t.replace(/\s*[>›]\s*/g, " › "); // a new name of your own
+  const typed = input.trim();
+  if (!typed) return "";
+  if (/^\d+$/.test(typed) && paths[+typed - 1]) return paths[+typed - 1];
+  const low = typed.toLowerCase().replace(/\s*[>›]\s*/g, " › ");
+  // English or Chinese names both work ("Sneakers", "运动休闲鞋", "鞋 › 运动休闲鞋").
+  return paths.find((p) => p.toLowerCase() === low || tCat(p).toLowerCase() === low) ||
+    paths.find((p) => p.toLowerCase().endsWith("› " + low) || tCat(p).toLowerCase().endsWith("› " + low)) ||
+    typed.replace(/\s*[>›]\s*/g, " › "); // a new name of your own
 }
 
 async function setItemCategory(key) {
   const a = S.lib.albums[key]; if (!a) return;
   const p = info(a);
-  const how = { word: "from a word in its title", store: "from the store's 🏷 setting", sizes: "from the shoe sizes in its title",
+  const how = L({ word: "from a word in its title", store: "from the store's 🏷 setting", sizes: "from the shoe sizes in its title",
     team: "because a team was found in its title", "clothing sizes": "from the clothing sizes in its title",
-    none: "nothing in its title said", yours: "your pick" }[p.catHow];
-  const pick = chooseCategory(`What is this item?\n\n${a.title}\n\nRight now: ${p.catPath} (${how})`, a.category || p.catPath, "to let the sorter decide");
+    none: "nothing in its title said", yours: "your pick" }[p.catHow],
+    { word: "根据标题里的词", store: "根据店铺的 🏷 设置", sizes: "根据标题里的鞋码", team: "因为标题里有球队",
+      "clothing sizes": "根据标题里的衣服尺码", none: "标题里没有说明", yours: "你的选择" }[p.catHow]);
+  const pick = chooseCategory(L(`What is this item?\n\n${a.title}\n\nRight now: ${p.catPath} (${how})`,
+    `这件商品是什么？\n\n${a.title}\n\n现在是：${tCat(p.catPath)}（${how}）`), a.category || p.catPath,
+    L("Leave empty to let the sorter decide.", "留空则让系统自动分类。"));
   if (pick === null) return;
   await call("POST", "/api/category", { key, category: pick });
   await refresh();
 }
 
 async function setStoreCategory(store) {
-  const pick = chooseCategory(`What does ${storeName(store)} sell?\n\nUsed for this store's items when their titles don't say what they are.`,
-    S.storeCats[store] || "", "for no default");
+  const pick = chooseCategory(L(`What does ${storeName(store)} sell?\n\nUsed for this store's items when their titles don't say what they are.`,
+    `${storeName(store)} 卖什么？\n\n当这个店铺的商品标题没说明是什么时使用。`),
+    S.storeCats[store] || "", L("Leave empty for no default.", "留空则不设默认。"));
   if (pick === null) return;
   await call("POST", "/api/store-category", { store, category: pick });
   await refresh();
@@ -560,36 +597,84 @@ async function exportCsv() {
   const content = "﻿" + rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\r\n");
   try {
     const res = await call("POST", "/api/save-file", { name: `yupoo-library-${today()}.csv`, content });
-    toast(`Saved ${rows.length - 1} items to ${res.path}`);
-  } catch (e) { toast("Couldn't save the CSV: " + e.message); }
+    toast(L(`Saved ${rows.length - 1} items to ${res.path}`, `已把 ${num(rows.length - 1)} 件保存到 ${res.path}`));
+  } catch (e) { toast(L("Couldn't save the CSV: ", "无法保存 CSV：") + e.message); }
 }
 
 async function backup() {
-  toast("Making a backup…");
+  toast(L("Making a backup…", "正在备份…"));
   try {
     const res = await call("POST", "/api/backup");
-    toast(`Backup saved to ${res.path}`);
-  } catch (e) { toast("Backup failed: " + e.message); }
+    toast(L(`Backup saved to ${res.path}`, `备份已保存到 ${res.path}`));
+  } catch (e) { toast(L("Backup failed: ", "备份失败：") + e.message); }
 }
 
 async function restore(file) {
   try {
     const res = await call("POST", "/api/restore", await file.arrayBuffer(), true);
-    toast(`Restore finished — ${res.added} items added.`);
+    toast(L(`Restore finished — ${res.added} items added.`, `恢复完成——新增 ${num(res.added)} 件。`));
     await refresh();
-  } catch (e) { toast("That file isn't a Yupoo Library backup (.zip)."); }
+  } catch (e) { toast(L("That file isn't a Yupoo Library backup (.zip).", "这个文件不是 Yupoo 图库的备份（.zip）。")); }
 }
 
-function openLink(text) {
-  let s = text.trim();
-  if (!s) return;
+// Turns pasted text into a Yupoo store address (or null): adds https://, and switches
+// x.yupoo.com/photos/<store>/... to the usual <store>.x.yupoo.com/... style.
+function yupooUrl(text) {
+  let s = String(text || "").trim();
+  if (!s) return null;
   if (!/^https?:\/\//i.test(s)) s = "https://" + s;
   let u;
-  try { u = new URL(s); } catch (e) { u = null; }
-  if (!u || !/\.yupoo\.com$/i.test(u.hostname)) { toast("That doesn't look like a Yupoo link."); return; }
-  // x.yupoo.com/photos/<store>/... is the same store as <store>.x.yupoo.com/... — use the usual style.
+  try { u = new URL(s); } catch (e) { return null; }
+  if (!/\.yupoo\.com$/i.test(u.hostname)) return null;
   const m = /^x\.yupoo\.com$/i.test(u.hostname) && u.pathname.match(/^\/photos\/([^/]+)(\/.*)?$/);
   if (m) u = new URL("https://" + m[1].toLowerCase() + ".x.yupoo.com" + (m[2] || "/albums") + u.search);
+  return u;
+}
+
+// ---------- "you already have this store" ----------
+// Pasting lots of links? The box tells you straight away if a store is already in your library
+// (or you already opened it earlier in this session), so you don't open it twice.
+function openedThisSession() {
+  try { return JSON.parse(sessionStorage.getItem("openedStores") || "[]"); } catch (e) { return []; }
+}
+function knownStore(u) {
+  if (!u || !/\.x\.yupoo\.com$/i.test(u.hostname)) return null;
+  const store = u.hostname.split(".")[0].toLowerCase();
+  const items = all().filter((a) => a.store.toLowerCase() === store);
+  const last = items.reduce((m, a) => Math.max(m, a.firstSeen || 0), 0);
+  if (items.length) return { store, count: items.length, last, name: storeName(items[0].store) };
+  if (openedThisSession().indexOf(store) !== -1) return { store, count: 0, last: 0, name: store };
+  return null;
+}
+function knownStoreText(k) {
+  if (k.count) {
+    return L(`Already in your library: “${k.name}” — ${k.count.toLocaleString()} item${k.count === 1 ? "" : "s"}, last added ${fmtDate(k.last)}.`,
+      `图库里已经有这个店铺：“${k.name}”——${num(k.count)} 件，最近一次添加于 ${fmtDate(k.last)}。`);
+  }
+  return L(`You already opened “${k.name}” earlier (nothing saved from it yet).`, `你之前已经打开过“${k.name}”（还没有保存任何商品）。`);
+}
+function updatePasteHint() {
+  const hint = $(".pastehint");
+  const k = knownStore(yupooUrl($(".link").value));
+  hint.hidden = !k;
+  if (k) hint.textContent = "⚠ " + knownStoreText(k);
+}
+
+function openLink(text, force) {
+  const u = yupooUrl(text);
+  if (!String(text || "").trim()) return;
+  if (!u) { toast(L("That doesn't look like a Yupoo link.", "这看起来不像 Yupoo 链接。")); return; }
+  const k = knownStore(u);
+  if (k && !force) {
+    toast(knownStoreText(k), L("Open anyway", "仍然打开"), () => openLink(text, true));
+    return;
+  }
+  if (/\.x\.yupoo\.com$/i.test(u.hostname)) {
+    const opened = openedThisSession();
+    const store = u.hostname.split(".")[0].toLowerCase();
+    if (opened.indexOf(store) === -1) opened.push(store);
+    try { sessionStorage.setItem("openedStores", JSON.stringify(opened)); } catch (e) {}
+  }
   location.href = u.href;
 }
 
@@ -653,6 +738,7 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.act === "backup") backup();
 });
 $("form.go").addEventListener("submit", (e) => { e.preventDefault(); openLink($(".link").value); });
+$(".link").addEventListener("input", updatePasteHint);
 $(".q").addEventListener("input", (e) => { S.q = e.target.value; S.page = 1; renderFilters(); renderGrid(); });
 // "Move to…" search box: typing narrows the list, Enter picks the top match, Esc closes it.
 $(".mv input").addEventListener("input", renderMoveOptions);
@@ -717,7 +803,7 @@ load().then(() => {
   const scroll = restoreView();
   renderAll();
   $("main").scrollTop = scroll;
-}).catch((e) => toast("Couldn't load your library: " + e.message));
+}).catch((e) => toast(L("Couldn't load your library: ", "无法加载你的图库：") + e.message));
 
 // "⬆ Check for updates" (only inside the app window, where updating is possible).
 // The app shows its own box: "Update available", "You're on the latest version", or "Couldn't check".
@@ -725,6 +811,6 @@ const updateBridge = window.__kitBridge && window.__kitBridge.checkUpdate ? wind
 if (updateBridge) $('[data-act="update"]').hidden = false;
 function checkForUpdates() {
   if (!updateBridge) return;
-  toast("Checking for updates…");
-  try { updateBridge.checkUpdate(); } catch (e) { toast("Couldn't check for updates: " + e.message); }
+  toast(L("Checking for updates…", "正在检查更新…"));
+  try { updateBridge.checkUpdate(); } catch (e) { toast(L("Couldn't check for updates: ", "无法检查更新：") + e.message); }
 }

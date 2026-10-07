@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="kit-token" content="{{TOKEN}}">
+<meta name="kit-lang" content="{{LANG}}">
 <title>Yupoo Library</title>
 <link rel="icon" href="icon.svg">
 <link rel="stylesheet" href="app.css">
@@ -17,6 +18,7 @@
     <form class="go">
       <input class="link" type="text" placeholder="Paste a Yupoo link, e.g. shida-tiyu888.x.yupoo.com/albums" autocomplete="off" spellcheck="false">
       <button type="submit">Open</button>
+      <div class="pastehint" hidden></div>
     </form>
     <div class="actions">
       <button class="navbtn" data-act="catalog" title="Your collections, like a wishlist">📒 Catalog</button>
@@ -26,6 +28,7 @@
       <button data-act="backup">Backup</button>
       <button data-act="update" title="See if a newer version of Yupoo Library is out" hidden>⬆ Check for updates</button>
       <button class="iconbtn" data-act="theme" title="Light / dark mode"></button>
+      <button class="iconbtn" data-act="settings" title="Settings: language, photos folder…">⚙ Settings</button>
       <label class="btn">Restore<input type="file" class="restore" accept=".zip,application/zip" hidden></label>
     </div>
   </header>
@@ -74,6 +77,7 @@
     </main>
   </div>
   <div class="toast"></div>
+  <script src="i18n.js"></script>
   <script src="teams.js"></script>
   <script src="categories.js"></script>
   <script src="brands.js"></script>

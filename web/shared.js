@@ -4,9 +4,11 @@ const TOKEN = document.querySelector('meta[name="kit-token"]').content;
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const fmtDate = (t) => t ? new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+const fmtDate = (ms) => ms ? new Date(ms).toLocaleDateString(typeof LANG !== "undefined" && LANG === "zh" ? "zh-CN" : undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
 const today = () => new Date().toISOString().slice(0, 10);
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+// "3 items" / "3 件" — the most common count in messages.
+const nItems = (n) => L(plural(n, "item"), `${n} 件`);
 
 // Everything loaded from the app. Each page adds its own fields (filters etc.) to S.
 const S = {
@@ -37,7 +39,7 @@ let toastTimer = null, toastAction = null;
 // A message at the bottom. With actionLabel, it also gets a button (e.g. Undo) and stays a bit longer.
 function toast(msg, actionLabel, action) {
   const t = $(".toast");
-  t.innerHTML = esc(msg) + (actionLabel ? ` <button class="toast-act">${esc(actionLabel)}</button>` : "");
+  t.innerHTML = esc(msg) + (actionLabel ? ` <button class="toast-act">${esc(window.t ? window.t(actionLabel) : actionLabel)}</button>` : "");
   toastAction = action || null;
   t.classList.toggle("act", !!actionLabel);
   t.classList.add("show");
@@ -77,7 +79,7 @@ async function saveSidebarWidth(w) {
   if (!aside) return;
   const handle = document.createElement("div");
   handle.className = "resizer";
-  handle.title = "Drag to resize — double-click for the normal width";
+  handle.title = t("Drag to resize — double-click for the normal width");
   aside.after(handle);
   let startX = 0, startW = 0, dragging = false;
   handle.addEventListener("mousedown", (e) => {
@@ -107,8 +109,9 @@ function applyTheme(theme) {
   else document.documentElement.removeAttribute("data-theme");
   try { localStorage.setItem("theme", theme); } catch (e) {}
   document.querySelectorAll('[data-act="theme"]').forEach((b) => {
-    b.textContent = THEMES[theme] || THEMES[""];
-    b.title = "Colours: " + (theme ? theme + " mode" : "automatic (follows Windows)") + " — click to change";
+    b.textContent = t(THEMES[theme] || THEMES[""]);
+    b.title = L("Colours: " + (theme ? theme + " mode" : "automatic (follows Windows)") + " — click to change",
+      "颜色：" + (theme === "dark" ? "深色" : theme === "light" ? "浅色" : "自动（跟随 Windows）") + "——点击切换");
   });
 }
 async function cycleTheme() {
@@ -116,10 +119,12 @@ async function cycleTheme() {
   const next = order[(order.indexOf(S.settings.theme || "") + 1) % order.length];
   S.settings.theme = next;
   applyTheme(next);
-  try { await call("POST", "/api/settings", S.settings); } catch (e) { toast("Couldn't save the colour setting: " + e.message); }
+  try { await call("POST", "/api/settings", S.settings); } catch (e) { toast(L("Couldn't save the colour setting: ", "无法保存颜色设置：") + e.message); }
 }
 applyTheme((() => { try { return localStorage.getItem("theme") || ""; } catch (e) { return ""; } })());
 document.addEventListener("click", (e) => { if (e.target.closest('[data-act="theme"]')) cycleTheme(); });
+// ⚙ Settings (in the Library and Catalog headers).
+document.addEventListener("click", (e) => { if (e.target.closest('[data-act="settings"]')) location.href = "/settings"; });
 
 let version = -1;
 async function load() {
@@ -129,14 +134,15 @@ async function load() {
   S.aliases = d.aliases || {};
   S.myTeams = d.myTeams || {};
   S.settings = Object.assign({ autoSave: true }, d.settings || {});
+  if (useLanguage(S.settings.language)) return; // reloads the page if the language changed elsewhere
   applyTheme(S.settings.theme || "");
   applySidebarWidth(S.settings.sidebarWidth || 0);
   S.storeNames = d.storeNames || {};
   S.storeCats = d.storeCategories || {};
   // Hovering over the page title shows which version of the app this is.
   if (d.appVersion) {
-    const h = document.querySelector("header h1"); if (h) h.title = "Yupoo Library version " + d.appVersion;
-    const u = document.querySelector('[data-act="update"]'); if (u) u.title = "You have version " + d.appVersion + " — see if a newer one is out";
+    const h = document.querySelector("header h1"); if (h) h.title = L("Yupoo Library version ", "Yupoo 图库版本 ") + d.appVersion;
+    const u = document.querySelector('[data-act="update"]'); if (u) u.title = L("You have version " + d.appVersion + " — see if a newer one is out", "你的版本是 " + d.appVersion + "——看看有没有新版本");
   }
   S.collections = d.collections || [];
   matcher = YO_buildMatcher(allAliases());
@@ -234,8 +240,8 @@ function openCollectionPicker(anchor, keys, onChange) {
   if (!keys.length) return;
   colpop = document.createElement("div");
   colpop.className = "colpop";
-  colpop.innerHTML = `<h4>${keys.length === 1 ? "Add to collection" : `Add ${keys.length} items to…`}</h4>
-    <input type="search" placeholder="Search or name a new collection…" autocomplete="off">
+  colpop.innerHTML = `<h4>${keys.length === 1 ? t("Add to collection") : L(`Add ${keys.length} items to…`, `把 ${keys.length} 件加入…`)}</h4>
+    <input type="search" placeholder="${t("Search or name a new collection…")}" autocomplete="off">
     <div class="dd-list"></div>`;
   document.body.appendChild(colpop);
   const input = colpop.querySelector("input");
@@ -254,11 +260,11 @@ function openCollectionPicker(anchor, keys, onChange) {
       html += `<div class="item ${inIt ? "in" : ""}" role="button" tabindex="0" data-col="${esc(c.id)}">
         <span class="ck">${inIt ? "✓" : ""}</span><span class="name">${esc(c.name)}</span><span class="c">${c.items.length}</span></div>`;
     });
-    const suggest = q || (S.collections.length ? "" : "Wishlist");
+    const suggest = q || (S.collections.length ? "" : L("Wishlist", "愿望清单"));
     if (suggest && !S.collections.some((c) => c.name.toLowerCase() === suggest.toLowerCase())) {
-      html += `<div class="item new" role="button" tabindex="0" data-newcol="${esc(suggest)}"><span class="name">➕ New collection “${esc(suggest)}”</span></div>`;
+      html += `<div class="item new" role="button" tabindex="0" data-newcol="${esc(suggest)}"><span class="name">${L("➕ New collection", "➕ 新建收藏夹")} “${esc(suggest)}”</span></div>`;
     }
-    if (!S.collections.length && !q) html += `<div class="hint">Or type a name above for your first collection.</div>`;
+    if (!S.collections.length && !q) html += `<div class="hint">${L("Or type a name above for your first collection.", "或者在上面输入名字，新建你的第一个收藏夹。")}</div>`;
     colpop.querySelector(".dd-list").innerHTML = html;
   };
 
@@ -267,15 +273,15 @@ function openCollectionPicker(anchor, keys, onChange) {
       if (el.dataset.newcol !== undefined) {
         const res = await call("POST", "/api/collections/create", { name: el.dataset.newcol, keys });
         await loadCollections();
-        toast(`Added ${plural(keys.length, "item")} to “${res.collection.name}”.`, "Open", () => openCatalog(false, res.collection.id));
+        toast(L(`Added ${plural(keys.length, "item")} to “${res.collection.name}”.`, `已把 ${keys.length} 件加入“${res.collection.name}”。`), "Open", () => openCatalog(false, res.collection.id));
       } else {
         const c = S.collections.find((x) => x.id === el.dataset.col);
         const inIt = keys.every((k) => c.items.some((it) => it.key === k));
         await call("POST", "/api/collections/" + (inIt ? "remove" : "add"), { id: c.id, keys });
         await loadCollections();
-        toast(inIt ? `Took ${plural(keys.length, "item")} out of “${c.name}”.` : `Added ${plural(keys.length, "item")} to “${c.name}”.`);
+        toast(inIt ? L(`Took ${plural(keys.length, "item")} out of “${c.name}”.`, `已把 ${keys.length} 件移出“${c.name}”。`) : L(`Added ${plural(keys.length, "item")} to “${c.name}”.`, `已把 ${keys.length} 件加入“${c.name}”。`));
       }
-    } catch (e) { toast("Couldn't change the collection: " + e.message); }
+    } catch (e) { toast(L("Couldn't change the collection: ", "无法修改收藏夹：") + e.message); }
     closeCollectionPicker();
     if (onChange) onChange();
   };

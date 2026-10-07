@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="kit-token" content="{{TOKEN}}">
+<meta name="kit-lang" content="{{LANG}}">
+<title>Settings — Yupoo Library</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="settings">
+  <header>
+    <div class="left">
+      <button class="navbtn" data-act="back" title="Back to the Library (your place there is kept)">◀ Library</button>
+      <h1><img src="icon.svg" alt="">Settings</h1>
+    </div>
+    <div class="actions">
+      <button class="iconbtn" data-act="theme" title="Light / dark mode"></button>
+    </div>
+  </header>
+  <div class="body">
+    <main class="setpage">
+
+      <section class="setcard">
+        <h2>Language</h2>
+        <p class="hint" data-en="The language of the app's buttons, menus and messages. In Chinese, items show the supplier's original title first."
+           data-zh="程序按钮、菜单和消息使用的语言。选择中文时，商品会先显示供应商的原始标题。"></p>
+        <div class="langs">
+          <label class="langopt"><input type="radio" name="lang" value="en"> <span><b>English</b></span></label>
+          <label class="langopt"><input type="radio" name="lang" value="zh"> <span><b>中文</b> (Chinese)</span></label>
+        </div>
+      </section>
+
+      <section class="setcard">
+        <h2>Photos folder</h2>
+        <p class="hint" data-en="Where the app keeps its copies of the cover photos. Choose another folder (for example on a bigger drive) and your existing photos can be moved there for you."
+           data-zh="程序保存封面图片副本的位置。你可以换一个文件夹（比如更大的硬盘），已有的图片可以帮你一起搬过去。"></p>
+        <div class="pathrow"><code class="thumbsdir"></code><span class="photocount"></span></div>
+        <div class="btnrow">
+          <button data-act="browse" class="primary">Browse…</button>
+          <button data-act="open" data-which="thumbs">📂 Open folder</button>
+          <button data-act="default" hidden>Use the default folder</button>
+        </div>
+        <div class="choose" hidden>
+          <label class="field"><span data-en="New folder" data-zh="新文件夹"></span>
+            <input class="newdir" type="text" spellcheck="false" placeholder="D:\Yupoo Photos"></label>
+          <label class="check"><input type="checkbox" class="movephotos" checked> <span class="movelabel"></span></label>
+          <div class="btnrow">
+            <button data-act="apply" class="primary">Use this folder</button>
+            <button data-act="cancel">Cancel</button>
+          </div>
+        </div>
+        <div class="moving" hidden>
+          <div class="track"><div class="fill"></div></div>
+          <div class="movetext"></div>
+        </div>
+      </section>
+
+      <section class="setcard">
+        <h2>Where things are saved</h2>
+        <div class="kv">
+          <span data-en="Your library (items, collections, settings)" data-zh="你的图库（商品、收藏夹、设置）"></span>
+          <code class="datadir"></code><button data-act="open" data-which="data">📂 Open folder</button>
+          <span data-en="Exports and backups (CSV, Backup, 📤 Export to share)" data-zh="导出和备份（CSV、备份、📤 导出分享）"></span>
+          <code class="downloadsdir"></code><button data-act="open" data-which="downloads">📂 Open folder</button>
+        </div>
+      </section>
+
+      <section class="setcard">
+        <h2 data-en="🩺 Check-up" data-zh="🩺 检查"></h2>
+        <p class="hint" data-en="Something not working? This checks your library, folders, internet and Yupoo, and explains any problem it finds."
+           data-zh="有东西不正常？这里会检查你的图库、文件夹、网络和 Yupoo，并说明发现的问题。"></p>
+        <div class="btnrow">
+          <button data-act="diagnose" class="primary" data-en="🩺 Run a check-up" data-zh="🩺 开始检查"></button>
+          <button data-act="copyreport" hidden data-en="📋 Copy report" data-zh="📋 复制报告"></button>
+        </div>
+        <div class="diag"></div>
+      </section>
+
+      <section class="setcard">
+        <h2>About</h2>
+        <p class="version"></p>
+        <div class="btnrow"><button data-act="update" hidden>⬆ Check for updates</button></div>
+      </section>
+
+    </main>
+  </div>
+  <div class="toast"></div>
+  <script src="i18n.js"></script>
+  <script src="teams.js"></script>
+  <script src="categories.js"></script>
+  <script src="brands.js"></script>
+  <script src="shared.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>
