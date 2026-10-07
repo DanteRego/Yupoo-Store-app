@@ -134,7 +134,10 @@ async function load() {
   S.storeNames = d.storeNames || {};
   S.storeCats = d.storeCategories || {};
   // Hovering over the page title shows which version of the app this is.
-  if (d.appVersion) { const h = document.querySelector("header h1"); if (h) h.title = "Yupoo Library version " + d.appVersion; }
+  if (d.appVersion) {
+    const h = document.querySelector("header h1"); if (h) h.title = "Yupoo Library version " + d.appVersion;
+    const u = document.querySelector('[data-act="update"]'); if (u) u.title = "You have version " + d.appVersion + " — see if a newer one is out";
+  }
   S.collections = d.collections || [];
   matcher = YO_buildMatcher(allAliases());
   cache.clear();

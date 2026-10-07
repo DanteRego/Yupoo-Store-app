@@ -648,6 +648,7 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.edit) editTeam(b.dataset.edit);
   else if (b.dataset.remove) removeKit(b.dataset.remove);
   else if (b.dataset.act === "refresh") refreshButton(b);
+  else if (b.dataset.act === "update") checkForUpdates();
   else if (b.dataset.act === "csv") exportCsv();
   else if (b.dataset.act === "backup") backup();
 });
@@ -717,3 +718,13 @@ load().then(() => {
   renderAll();
   $("main").scrollTop = scroll;
 }).catch((e) => toast("Couldn't load your library: " + e.message));
+
+// "⬆ Check for updates" (only inside the app window, where updating is possible).
+// The app shows its own box: "Update available", "You're on the latest version", or "Couldn't check".
+const updateBridge = window.__kitBridge && window.__kitBridge.checkUpdate ? window.__kitBridge : null;
+if (updateBridge) $('[data-act="update"]').hidden = false;
+function checkForUpdates() {
+  if (!updateBridge) return;
+  toast("Checking for updates…");
+  try { updateBridge.checkUpdate(); } catch (e) { toast("Couldn't check for updates: " + e.message); }
+}

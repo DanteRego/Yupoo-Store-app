@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -15,14 +16,35 @@ import (
 // relaunchPath is set after a successful update: main() starts it once this window has closed.
 var relaunchPath string
 
-// offerUpdate runs once, a few seconds after the app opens: if GitHub has a newer version,
-// it asks whether to update, and if you say yes, downloads it, swaps it in and restarts.
+// updateBusy stops two checks (start-up and the button) from running at the same time.
+var updateBusy atomic.Bool
+
+// offerUpdate checks GitHub for a newer version; if there is one, it asks whether to update,
+// and if you say yes, downloads it, swaps it in and restarts.
+// It runs a few seconds after the app opens (manual=false: says nothing unless there's an update),
+// and when you click "Check for updates" (manual=true: always answers).
 // No answer is remembered: you're asked again the next time you open the app.
-func offerUpdate(w webview2.WebView) {
-	time.Sleep(3 * time.Second) // let the Library appear first
+func offerUpdate(w webview2.WebView, manual bool) {
+	if !updateBusy.CompareAndSwap(false, true) {
+		return
+	}
+	defer updateBusy.Store(false)
+	if !manual {
+		time.Sleep(3 * time.Second) // let the Library appear first
+	}
 	rel, err := CheckForUpdate()
-	if err != nil || rel == nil {
-		return // offline, GitHub busy, or already up to date: say nothing
+	if err != nil {
+		if manual {
+			showOnWindow(w, "Yupoo Library", "Couldn't check for updates right now — maybe there's no internet connection, "+
+				"or GitHub is busy. Try again in a minute.\n\n("+err.Error()+")", 0x30)
+		}
+		return
+	}
+	if rel == nil {
+		if manual {
+			showOnWindow(w, "Yupoo Library", "You're on the latest version ("+AppVersion+").", 0x40)
+		}
+		return
 	}
 	if !askYesNo(w, "Update available — Yupoo Library", updateMessage(rel)) {
 		return

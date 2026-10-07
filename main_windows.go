@@ -55,9 +55,11 @@ func main() {
 	_ = w.Bind("kitCrawl", func(act, pageURL, cookie, mode string, min bool) CrawlReply {
 		return app.crawlAction(act, pageURL, cookie, mode, min)
 	})
+	// The Library's "Check for updates" button.
+	_ = w.Bind("kitCheckUpdate", func() { go offerUpdate(w, true) })
 	w.Init(bridgeJS(app.baseURL) + crawlbarJS + captureJS)
-	go CleanupOldVersion() // removes the previous program left behind by an update
-	go offerUpdate(w)      // checks GitHub for a newer version (see update.go)
+	go CleanupOldVersion()   // removes the previous program left behind by an update
+	go offerUpdate(w, false) // checks GitHub for a newer version (see update.go)
 	w.Navigate(app.baseURL)
 	w.Run()
 
