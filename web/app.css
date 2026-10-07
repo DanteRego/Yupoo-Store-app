@@ -218,3 +218,18 @@ button.primary { background: var(--green); color: #fff; font-weight: 600; }
 .diagrow.fail { outline: 1px solid #d9534f; }
 .diagrow.warn { outline: 1px solid #f0b35a; }
 .diagrow.running { color: var(--muted); }
+
+/* ---------- ✨ New Additions ---------- */
+.newlist { padding-top: 10px; }
+.item.newadd { font-weight: 600; }
+.item.newadd.has:not(.on) .c { background: var(--green); color: #fff; border-radius: 99px; padding: 0 7px; font-weight: 600; }
+.spinning { display: inline-block; animation: spin .9s linear infinite; color: var(--muted); }
+.item.on .spinning { color: #fff; }
+.newhead { margin-bottom: 14px; }
+.newtitle { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.newtitle h2 { margin: 0; font-size: 20px; }
+.newtitle button:disabled { opacity: .5; cursor: default; }
+.newstatus { margin-top: 6px; color: var(--muted); font-size: 13px; }
+.newstatus.busy { color: var(--accent); }
+.newbadge { position: absolute; left: 6px; top: 6px; background: #e8452c; color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .04em; padding: 2px 7px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+.selecting .newbadge { left: 40px; }

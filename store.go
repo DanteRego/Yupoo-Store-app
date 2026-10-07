@@ -29,6 +29,9 @@ type Album struct {
 	Category  string `json:"category,omitempty"`
 	FirstSeen int64  `json:"firstSeen"`
 	LastSeen  int64  `json:"lastSeen"`
+	// NewAt is when the start-up check (newcheck.go) found this item as something its store had just
+	// added. Such items show on the Library's "✨ New Additions" page until you mark them as seen (0).
+	NewAt int64 `json:"newAt,omitempty"`
 }
 
 // AlbumIn is what a Yupoo page sends when it sees a kit.
@@ -70,6 +73,9 @@ type libraryFile struct {
 	StoreCategories map[string]string `json:"storeCategories,omitempty"`
 	// Collections are the Catalog: your own lists of saved items, like "Wishlist".
 	Collections []*Collection `json:"collections,omitempty"`
+	// NewCheck is, per store address, the highest album number the start-up check has seen there.
+	// Albums with a higher number are new additions (see newcheck.go).
+	NewCheck map[string]int64 `json:"newCheck,omitempty"`
 }
 
 type thumbJob struct{ key, host, cover string }
@@ -124,6 +130,9 @@ func OpenLibrary(dir, thumbDir string) (*Library, error) {
 	}
 	if l.data.StoreCategories == nil {
 		l.data.StoreCategories = map[string]string{}
+	}
+	if l.data.NewCheck == nil {
+		l.data.NewCheck = map[string]int64{}
 	}
 	l.ensureMyTeamsFile()
 	go l.thumbWorker()
@@ -246,6 +255,11 @@ func (l *Library) Flush() error {
 }
 
 func (l *Library) SaveAlbums(in []AlbumIn) (added, total int) {
+	return l.saveAlbums(in, false)
+}
+
+// saveAlbums saves items; with markNew, items that weren't saved before go on the New Additions page.
+func (l *Library) saveAlbums(in []AlbumIn, markNew bool) (added, total int) {
 	now := time.Now().UnixMilli()
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -258,6 +272,9 @@ func (l *Library) SaveAlbums(in []AlbumIn) (added, total int) {
 		if cur == nil {
 			cur = &Album{Key: key, Host: a.Host, Store: a.Store, ID: a.ID, Title: a.Title, Cover: a.Cover,
 				Count: a.Count, Link: a.Link, FirstSeen: now, LastSeen: now}
+			if markNew {
+				cur.NewAt = now
+			}
 			l.data.Albums[key] = cur
 			added++
 		} else {
@@ -307,6 +324,7 @@ func (l *Library) RemoveStore(store string) int {
 	for k, a := range l.data.Albums {
 		if a.Store == store {
 			keys = append(keys, k)
+			delete(l.data.NewCheck, strings.ToLower(a.Host))
 		}
 	}
 	for _, k := range keys {

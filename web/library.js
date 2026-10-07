@@ -4,8 +4,11 @@ const PER_PAGE_CHOICES = [60, 120, 240];
 const savedPerPage = (() => { try { return +localStorage.getItem("perPage"); } catch (e) { return 0; } })();
 
 // The Library's own filters, added to the shared S.
-Object.assign(S, { cat: "", team: "", store: "", kit: "", season: "", extra: "", q: "", sort: "team",
+// view: "" = every item, "new" = the ✨ New Additions page (items the start-up check found).
+Object.assign(S, { view: "", cat: "", team: "", store: "", kit: "", season: "", extra: "", q: "", sort: "team",
   page: 1, perPage: PER_PAGE_CHOICES.indexOf(savedPerPage) !== -1 ? savedPerPage : 120 });
+// The items the current page is about: everything, or only the new additions.
+const inView = () => (S.view === "new" ? all().filter((a) => a.newAt) : all());
 // The dropdown filters above the items. "f" is the name of the filter in S.
 const FILTERS = [
   { f: "cat", label: "Category", any: "Any category" },
@@ -36,7 +39,7 @@ const item = (attr, val, label, n, active, extra, openUrl, renameStore) =>
 
 // Categories, with their subcategories underneath (only the ones that have items).
 function renderCats() {
-  const inStore = all().filter((a) => !S.store || a.store === S.store);
+  const inStore = inView().filter((a) => !S.store || a.store === S.store);
   const counts = new Map();
   inStore.forEach((a) => {
     const p = info(a);
@@ -78,12 +81,99 @@ const catRank = (path) => { const [c, s] = path.split(" › "); return YO_catego
 
 function renderStores() {
   const counts = new Map(), hosts = new Map();
-  all().forEach((a) => { counts.set(a.store, (counts.get(a.store) || 0) + 1); hosts.set(a.store, a.host); });
-  let html = item("store", "", "All stores", all().length, S.store === "");
+  inView().forEach((a) => { counts.set(a.store, (counts.get(a.store) || 0) + 1); hosts.set(a.store, a.host); });
+  // Keep the store you picked visible (e.g. on New Additions after its new items were marked as seen).
+  const picked = S.store && !counts.has(S.store) && all().find((a) => a.store === S.store);
+  if (picked) { counts.set(S.store, 0); hosts.set(S.store, picked.host); }
+  let html = item("store", "", "All stores", inView().length, S.store === "");
   [...counts.keys()].sort((a, b) => storeName(a).localeCompare(storeName(b))).forEach((s) => {
     html += item("store", s, storeName(s), counts.get(s), S.store === s, "", "https://" + hosts.get(s) + "/categories", true);
   });
   $(".stores").innerHTML = html;
+}
+
+// ---------- ✨ New Additions ----------
+// A few seconds after the app opens, it looks through your stores for items they've added since
+// last time (newcheck.go). Those items show on the New Additions page until you mark them as seen.
+let newCheck = null, newCheckTimer = null;
+
+// The "✨ New Additions" entry at the top of the sidebar, with how many new items there are.
+function renderNewItem() {
+  const n = all().filter((a) => a.newAt).length;
+  const busy = newCheck && newCheck.running;
+  $(".newlist").innerHTML = `<div class="item newadd ${S.view === "new" ? "on" : ""} ${n ? "has" : ""}" role="button" tabindex="0" data-view="new"
+    title="${esc(busy ? L("Checking your stores for new items…", "正在检查店铺的新品…") : t("Items your stores added since you last opened the app"))}">
+    <span class="name">${t("✨ New Additions")}${busy ? ` <span class="spinning">⟳</span>` : ""}</span><span class="c">${n}</span></div>`;
+}
+
+// The heading on the New Additions page: what the check is doing, and the buttons.
+function renderNewHead() {
+  const box = $(".newhead");
+  box.hidden = S.view !== "new";
+  if (box.hidden) return;
+  const st = newCheck || {};
+  const nStores = new Set(all().map((a) => a.store)).size;
+  let status;
+  if (st.running) {
+    status = L(`Checking your stores for new items… ${st.done} of ${st.stores} done${st.store ? ` (now: ${storeName(st.store)})` : ""}${st.found ? ` — ${st.found} new so far` : ""}.`,
+      `正在检查店铺的新品…已完成 ${st.done}/${st.stores}${st.store ? `（正在检查：${storeName(st.store)}）` : ""}${st.found ? `——目前找到 ${st.found} 件` : ""}。`);
+  } else if (st.finished) {
+    const when = new Date(st.finished).toLocaleTimeString(LANG === "zh" ? "zh-CN" : undefined, { hour: "numeric", minute: "2-digit" });
+    status = L(`Checked ${st.done} store${st.done === 1 ? "" : "s"} at ${when} — ${st.found ? `found ${st.found} new item${st.found === 1 ? "" : "s"}` : "nothing new"}.`,
+      `${when} 检查了 ${st.done} 个店铺——${st.found ? `找到 ${st.found} 件新品` : "没有新品"}。`);
+    if (st.first) status += " " + L(`${st.first === st.done ? "This was the first check, so there was nothing to compare with yet" : `${st.first} store${st.first === 1 ? " was" : "s were"} checked for the first time`} — from now on, items added to ${st.first === 1 ? "it" : "them"} will show up here.`,
+      `${st.first === st.done ? "这是第一次检查，还没有可以比较的" : `${st.first} 个店铺是第一次检查`}——以后它们新上架的商品会显示在这里。`);
+    if (st.failed) status += " " + L("Yupoo stopped answering, so some stores weren't checked — try ⟳ Check now in a few minutes.", "Yupoo 停止响应，部分店铺没有检查——过几分钟再点“⟳ 立即检查”。");
+    else if (st.skipped) status += " " + L(`${st.skipped} store${st.skipped === 1 ? "" : "s"} couldn't be opened.`, `${st.skipped} 个店铺打不开。`);
+    if (st.locked) status += " " + L(`${st.locked} store${st.locked === 1 ? " needs a password or is closed, so it" : "s need a password or are closed, so they"} can't be checked.`,
+      `${st.locked} 个店铺需要密码或已关闭，无法检查。`);
+  } else {
+    status = L(`Your ${nStores} stores are checked for new items a few seconds after the app opens.`, `应用打开几秒后，会检查你的 ${nStores} 个店铺有没有新品。`);
+  }
+  const n = matchingKeys.length;
+  box.innerHTML = `<div class="newtitle"><h2>${t("✨ New Additions")}</h2><span class="grow"></span>
+      <button data-act="check-now" ${st.running ? "disabled" : ""} title="${t("Look through your stores for new items again")}">${t("⟳ Check now")}</button>
+      <button data-act="seen-all" class="primary" ${n ? "" : "disabled"} title="${t("Take these items off New Additions (they stay in your library)")}">${L(`✓ Mark ${n === inView().length ? "all" : "these"} as seen${n ? ` (${n})` : ""}`, `✓ ${n === inView().length ? "全部" : "这些"}标为已看${n ? `（${n}）` : ""}`)}</button>
+      <button data-act="leave-new">${t("◀ All items")}</button></div>
+    <div class="newstatus ${st.running ? "busy" : ""}">${esc(status)}</div>`;
+}
+
+function setView(view) {
+  S.view = view; S.page = 1;
+  // New Additions shows the newest finds first.
+  if (view === "new") { S.sort = "saved"; $(".sort").value = "saved"; }
+  update();
+  $("main").scrollTop = 0;
+}
+
+// Reads how the check is going; keeps reading while it runs, and shows what it found when it's done.
+async function pollNewCheck() {
+  clearTimeout(newCheckTimer);
+  let st;
+  try { st = await call("GET", "/api/new-check"); } catch (e) { return; }
+  const was = newCheck;
+  newCheck = st;
+  if (was && st.found > (was.found || 0)) await refresh(); // new items came in: show them
+  else { renderNewItem(); renderNewHead(); }
+  if (was && was.running && !st.running && st.found) {
+    toast(L(`Found ${st.found} new item${st.found === 1 ? "" : "s"} in your stores.`, `在你的店铺里找到 ${st.found} 件新品。`),
+      S.view === "new" ? null : "Show", S.view === "new" ? null : () => setView("new"));
+  }
+  // Before it starts (a few seconds after opening) and while it runs, look again soon.
+  if (st.running || !st.started) newCheckTimer = setTimeout(pollNewCheck, st.running ? 2500 : 3000);
+}
+
+async function checkNow() {
+  try { newCheck = await call("POST", "/api/new-check"); } catch (e) { toast(L("Couldn't start the check: ", "无法开始检查：") + e.message); return; }
+  renderNewItem(); renderNewHead();
+  pollNewCheck();
+}
+
+async function markSeen(keys) {
+  if (!keys.length) return;
+  try { await call("POST", "/api/new-seen", { keys }); } catch (e) { toast(L("Couldn't mark them as seen: ", "无法标为已看：") + e.message); return; }
+  await refresh();
+  toast(L(`Marked ${keys.length} item${keys.length === 1 ? "" : "s"} as seen — still in your library.`, `已把 ${keys.length} 件标为已看——它们仍在图库里。`));
 }
 
 // ---------- dropdown filters ----------
@@ -178,6 +268,7 @@ function pick(f, v) {
 // ---------- grid ----------
 // Does this item pass every filter (except "skip") and the search box?
 function passes(a, skip) {
+  if (S.view === "new" && !a.newAt) return false;
   for (const { f } of FILTERS) {
     if (f !== skip && S[f] && !vals(a, f).includes(S[f])) return false;
   }
@@ -223,6 +314,8 @@ function renderGrid() {
   shownKeys = pageItems.map((a) => a.key);
   matchingKeys = list.map((a) => a.key);
   renderSelBar();
+  renderNewHead();
+  const viewTotal = inView().length;
   const nStores = new Set(all().map((a) => a.store)).size;
   $(".count").textContent = total ? L(`${total} items · ${nStores} stores`, `${total} 件 · ${nStores} 个店铺`) : "";
   if (!total) {
@@ -246,9 +339,14 @@ function renderGrid() {
   $(".summary").textContent = (list.length > S.perPage
     ? L(`Showing ${start + 1}–${start + pageItems.length} of ${list.length.toLocaleString()} items`, `显示第 ${start + 1}–${start + pageItems.length} 件，共 ${num(list.length)} 件`)
     : L(`${list.length.toLocaleString()} items`, `${num(list.length)} 件`)) +
-    (list.length !== total ? L(` (${total.toLocaleString()} saved in total)`, `（总共保存了 ${num(total)} 件）`) : "");
+    (list.length === viewTotal ? "" : S.view === "new"
+      ? L(` (${viewTotal.toLocaleString()} new in total)`, `（总共 ${num(viewTotal)} 件新品）`)
+      : L(` (${viewTotal.toLocaleString()} saved in total)`, `（总共保存了 ${num(viewTotal)} 件）`));
   if (!list.length) {
-    $(".grid").innerHTML = `<div class="empty" style="grid-column:1/-1">${L("No items match these filters.", "没有符合这些筛选条件的商品。")}</div>`;
+    $(".grid").innerHTML = `<div class="empty" style="grid-column:1/-1">${S.view === "new" && !viewTotal
+      ? L(`<strong>Nothing new right now</strong>Each time you open the app, it looks through your ${nStores} stores for items they've added since last time. Anything it finds shows up here.`,
+        `<strong>现在没有新品</strong>每次打开应用时，它都会检查你的 ${nStores} 个店铺上次之后新上架的商品。找到的都会显示在这里。`)
+      : L("No items match these filters.", "没有符合这些筛选条件的商品。")}</div>`;
     renderPager(0, 0);
     return;
   }
@@ -269,6 +367,7 @@ function renderGrid() {
       <a class="img" href="${esc(a.link)}">
         <img data-key="${esc(a.key)}" data-cover="${esc(a.cover || "")}" alt="" loading="lazy">
         ${a.count ? `<span class="n">${L(`${a.count} photos`, `${a.count} 张图`)}</span>` : ""}
+        ${a.newAt ? `<span class="newbadge" title="${esc(L(`New — found ${fmtDate(a.newAt)}`, `新品——发现于 ${fmtDate(a.newAt)}`))}">${t("NEW")}</span>` : ""}
       </a>
       <div class="meta">
         <div class="catline ${p.category === "Other" ? "unsorted" : ""}">${esc(tCat(p.catPath))}${p.brand ? ` · <span class="brand">${esc(p.brand)}</span>` : ""}${p.catEdited ? ` · <span class="tag">${t("your pick")}</span>` : ""}</div>
@@ -279,6 +378,7 @@ function renderGrid() {
           ${starButton(a.key)}
           <button data-cat-edit="${esc(a.key)}" title="Change what this item is">🏷</button>
           ${p.clothing ? `<button data-edit="${esc(a.key)}" title="Set the team">✎ Team</button>` : ""}
+          ${a.newAt ? `<button data-seen="${esc(a.key)}" title="Seen it — take it off New Additions (it stays in your library)">✓</button>` : ""}
           <button data-remove="${esc(a.key)}" title="Remove from library">🗑</button>
         </div>
       </div>
@@ -315,7 +415,7 @@ function goToPage(n) {
 // ---------- picking up where you left off ----------
 // When you open an album (or a store) and come back, the Library returns to the same filters,
 // search, page and scroll position. Kept for this app session only.
-const VIEW_KEYS = ["cat", "team", "store", "kit", "season", "extra", "q", "sort", "page"];
+const VIEW_KEYS = ["view", "cat", "team", "store", "kit", "season", "extra", "q", "sort", "page"];
 function saveView() {
   const v = { scroll: $("main").scrollTop };
   VIEW_KEYS.forEach((k) => { v[k] = S[k]; });
@@ -450,7 +550,7 @@ async function removeSelected() {
   toast(L(`Removed ${keys.length} items.`, `已删除 ${keys.length} 件。`));
 }
 
-function update() { renderCats(); renderStores(); renderFilters(); renderGrid(); }
+function update() { renderNewItem(); renderCats(); renderStores(); renderFilters(); renderGrid(); }
 function renderAll() {
   update();
   $(".autosave").checked = S.settings.autoSave;
@@ -716,6 +816,11 @@ document.addEventListener("click", (e) => {
   const b = e.target.closest("button, .item");
   if (!b) return;
   if (b.dataset.page) goToPage(+b.dataset.page);
+  else if (b.dataset.view !== undefined) setView(S.view === b.dataset.view ? "" : b.dataset.view);
+  else if (b.dataset.act === "leave-new") setView("");
+  else if (b.dataset.act === "check-now") checkNow();
+  else if (b.dataset.act === "seen-all") markSeen(matchingKeys.slice());
+  else if (b.dataset.seen) markSeen([b.dataset.seen]);
   else if (b.dataset.collect) openCollectionPicker(b, [b.dataset.collect], refreshStars);
   else if (b.dataset.act === "catalog") openCatalog(false);
   else if (b.dataset.act === "catalog-win") openCatalog(true);
@@ -809,6 +914,7 @@ load().then(() => {
   const scroll = restoreView();
   renderAll();
   $("main").scrollTop = scroll;
+  pollNewCheck(); // how the ✨ New Additions check is going
 }).catch((e) => toast(L("Couldn't load your library: ", "无法加载你的图库：") + e.message));
 
 // "⬆ Check for updates" (only inside the app window, where updating is possible).

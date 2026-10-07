@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 //go:embed web/*
@@ -21,6 +22,7 @@ var webFiles embed.FS
 type App struct {
 	lib     *Library
 	crawl   *Crawler
+	check   *NewChecker
 	token   string
 	baseURL string
 }
@@ -108,6 +110,12 @@ func StartApp() (*App, error) {
 	tok := make([]byte, 16)
 	_, _ = rand.Read(tok)
 	app := &App{lib: lib, crawl: NewCrawler(lib), token: hex.EncodeToString(tok)}
+	app.check = NewNewChecker(lib, app.crawl)
+	// A few seconds after opening, look through your stores for new items (see newcheck.go).
+	go func() {
+		time.Sleep(8 * time.Second)
+		app.check.Start()
+	}()
 
 	addr := "127.0.0.1:0"
 	if p := os.Getenv("KIT_PORT"); p != "" {
@@ -210,6 +218,20 @@ func (a *App) routes() http.Handler {
 		}
 		_ = decode(r, &in)
 		return a.crawlAction(r.PathValue("act"), in.URL, in.Cookie, in.Mode, in.Min), nil
+	}))
+	// The "✨ New Additions" check (newcheck.go): its progress, "Check now", and "Mark as seen".
+	mux.HandleFunc("GET /api/new-check", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		return a.check.Status(), nil
+	}))
+	mux.HandleFunc("POST /api/new-check", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		return a.check.Start(), nil
+	}))
+	mux.HandleFunc("POST /api/new-seen", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in struct{ Keys []string }
+		if err := decode(r, &in); err != nil {
+			return nil, err
+		}
+		return map[string]int{"changed": a.lib.MarkSeen(in.Keys)}, nil
 	}))
 	mux.HandleFunc("POST /api/save-albums", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 		var in []AlbumIn
