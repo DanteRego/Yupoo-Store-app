@@ -13,6 +13,10 @@ STARTING IT
 1. Unzip, then double-click YupooLibrary.exe. No install needed.
 2. The first time, Windows may say "Windows protected your PC" because the app
    isn't from a known publisher. Click "More info" -> "Run anyway".
+   If Windows Security says the file "contains a virus or potentially unwanted software",
+   that's a false alarm common for small unsigned apps: open Windows Security ->
+   Virus & threat protection -> Protection history, pick the YupooLibrary.exe entry ->
+   Actions -> Allow on device. (Only do this for a copy from the official GitHub release.)
 3. Needs Windows 10 or 11 (it uses Microsoft Edge's built-in WebView2).
 
 USING IT

@@ -1,0 +1,99 @@
+# Automatic releases.
+# Every push to main: GitHub reads AppVersion from update.go. If there's no release with that
+# number yet, it builds YupooLibrary.exe (with the icon) and publishes the release with the .exe
+# attached — so the tag and the version inside the program always match. If the release already
+# exists, nothing happens. The "what's new" text comes from WHATS-NEW.txt (the section for this
+# version), or else from the commit messages since the last release.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # also lets you start it by hand from the Actions tab
+
+permissions:
+  contents: write # needed to create releases
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # all history and tags, for the commit-message notes
+
+      - name: Read the version from update.go
+        id: ver
+        run: |
+          $m = Select-String -Path update.go -Pattern '^const AppVersion = "([^"]+)"'
+          if (-not $m) { throw "Couldn't find AppVersion in update.go" }
+          $v = $m.Matches[0].Groups[1].Value
+          "version=$v" >> $env:GITHUB_OUTPUT
+          gh release view $v *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $v already exists - nothing to do. (Raise AppVersion in update.go to make a new release.)"
+            "exists=true" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "No release $v yet - building and publishing it."
+            "exists=false" >> $env:GITHUB_OUTPUT
+          }
+          $global:LASTEXITCODE = 0
+
+      - uses: actions/setup-go@v5
+        if: steps.ver.outputs.exists == 'false'
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Build YupooLibrary.exe
+        if: steps.ver.outputs.exists == 'false'
+        run: |
+          go run tools/makeicon/main.go "Icon Yupoo.ico"
+          go build -trimpath -ldflags "-H windowsgui" -o YupooLibrary.exe .
+          if (-not (Test-Path YupooLibrary.exe)) { throw "The build didn't produce YupooLibrary.exe" }
+          # Safety check: the version inside the program must be the release's version.
+          $bytes = [System.IO.File]::ReadAllBytes("YupooLibrary.exe")
+          $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+          if (-not $text.Contains("${{ steps.ver.outputs.version }}")) { throw "YupooLibrary.exe doesn't contain version ${{ steps.ver.outputs.version }}" }
+
+      - name: Write the release notes
+        if: steps.ver.outputs.exists == 'false'
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          $notes = ""
+          if (Test-Path WHATS-NEW.txt) {
+            # The section that starts with a line "## <version>" and runs until the next "## ".
+            $lines = Get-Content WHATS-NEW.txt -Encoding UTF8
+            $in = $false; $buf = @()
+            foreach ($l in $lines) {
+              if ($l -match '^##\s+(.+?)\s*$') { if ($in) { break }; $in = ($Matches[1] -eq $v); continue }
+              if ($in) { $buf += $l }
+            }
+            $notes = ($buf -join "`n").Trim()
+          }
+          if (-not $notes) {
+            # No notes written for this version: use the commit messages since the last release.
+            $prev = git describe --tags --abbrev=0 2>$null
+            $global:LASTEXITCODE = 0
+            if ($prev) { $log = git log "$prev..HEAD" --pretty=format:"- %s" --no-merges } else { $log = git log -20 --pretty=format:"- %s" --no-merges }
+            $notes = "What's new in $v`n`n" + (($log | Select-Object -First 15) -join "`n")
+          }
+          Set-Content -Path release-notes.txt -Value $notes -Encoding UTF8
+          Write-Host "Release notes:"; Get-Content release-notes.txt
+
+      - name: Publish the release
+        if: steps.ver.outputs.exists == 'false'
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          gh release create $v YupooLibrary.exe --title $v --notes-file release-notes.txt --target $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw "Couldn't create the release" }
+          Write-Host "Published release $v - everyone's app will offer it the next time it opens."

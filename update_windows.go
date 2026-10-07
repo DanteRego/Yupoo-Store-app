@@ -46,6 +46,20 @@ func offerUpdate(w webview2.WebView, manual bool) {
 		}
 		return
 	}
+	// Already installed this exact release, yet it still looks newer? Then the program attached to it
+	// says an older version inside (AppVersion wasn't raised before building) — installing it again
+	// would just loop. Say so instead of offering it.
+	if updatedTo() == rel.Version {
+		if manual {
+			showOnWindow(w, "Yupoo Library", tr(
+				"You already have release "+rel.Version+" installed — but the program attached to that release reports version "+AppVersion+
+					" inside, so it keeps looking out of date.\n\nNothing is wrong with your library. Whoever published the release should raise AppVersion to "+
+					rel.Version+", build again and replace YupooLibrary.exe on the release.",
+				"你已经安装了版本 "+rel.Version+"——但这个版本附带的程序内部写的是 "+AppVersion+
+					"，所以看起来一直像是旧版本。\n\n你的图库没有任何问题。发布者需要把 AppVersion 改成 "+rel.Version+"，重新编译，并替换发布里的 YupooLibrary.exe。"), 0x40)
+		}
+		return
+	}
 	if !askYesNo(w, tr("Update available — Yupoo Library", "有可用更新 — Yupoo Library"), updateMessage(rel)) {
 		return
 	}
@@ -67,7 +81,9 @@ func offerUpdate(w webview2.WebView, manual bool) {
 				"\n\n("+err.Error()+")\n\n"+tr("You can also download the new version yourself from:", "你也可以自己从这里下载新版本：")+"\n"+rel.PageURL, 0x30)
 		return
 	}
-	// Close this window; main() then saves anything not written yet and starts the new version.
+	// Remember what was installed (so a mislabelled release can't loop), then close this window;
+	// main() saves anything not written yet and starts the new version.
+	markUpdated(rel.Version)
 	relaunchPath = exe
 	w.Dispatch(func() { w.Terminate() })
 }

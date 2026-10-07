@@ -14,7 +14,7 @@ import (
 
 // AppVersion is this build's version. When publishing an update, raise it here, build,
 // and make a GitHub release with the same tag (e.g. v1.0.1) — see HOW-TO-TWEAK.txt.
-const AppVersion = "1.0.1"
+const AppVersion = "1.0.3"
 
 // updateRepo is the GitHub project the app checks for new versions on start-up.
 const updateRepo = "DanteRego/Yupoo-Store-app"
@@ -216,6 +216,10 @@ func trimNotes(s string) string {
 
 // uiLang returns the app's language ("en" or "zh"); main_windows.go points it at your settings.
 var uiLang = func() string { return "en" }
+
+// updatedTo / markUpdated read and save Settings.UpdatedTo (main_windows.go connects them to the library).
+var updatedTo = func() string { return "" }
+var markUpdated = func(version string) {}
 
 // tr picks the English or Chinese wording for the update messages.
 func tr(en, zh string) string {

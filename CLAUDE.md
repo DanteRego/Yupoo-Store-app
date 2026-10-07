@@ -8,7 +8,7 @@ should work for any item, not only kits.
 The owner is new to programming: explain changes in plain words and keep steps simple.
 
 ## Build and try a change
-- Run `build.bat` (or: `go build -trimpath -ldflags "-H windowsgui -s -w" -o YupooLibrary.exe .`).
+- Run `build.bat` (or: `go build -trimpath -ldflags "-H windowsgui" -o YupooLibrary.exe .`).
 - Dependencies are in `vendor/`, so no download is needed. Don't delete `vendor/`.
 - After building, the owner opens YupooLibrary.exe to try the change.
 
@@ -34,8 +34,9 @@ The owner is new to programming: explain changes in plain words and keep steps s
 - `server.go` — local web server + API the Library page calls (token-protected); data folder locations; `downloadsDir()` (CSV/backup/shared files) asks Windows for the real Downloads folder (`downloads_windows.go`) — the owner's is `J:Downloads`, not under the user profile
   (moves the old `KitLibrary` / `M:\Kit Library` folders to the new names on first start).
 - `main_windows.go` — the app window; `main_other.go` — Mac/Linux test mode (library only).
-- `update.go`, `update_windows.go` — update check (also the Library's "⬆ Check for updates" button → `kitCheckUpdate` binding → `offerUpdate(w, true)`, which always answers): a few seconds after opening, the app asks GitHub for the latest release of `DanteRego/Yupoo-Store-app`; if its tag (e.g. v1.0.1) is newer than `AppVersion`, a Yes/No box explains what's new and that data isn't touched. Yes downloads the release's `YupooLibrary.exe`, renames the running exe to `.old`, puts the new one in place and restarts (the new copy deletes `.old`). Raise `AppVersion` for every release (steps in HOW-TO-TWEAK.txt). `KIT_UPDATE_API` overrides the GitHub address for testing.
-- App icon: `Icon Yupoo.ico`. `build.bat` turns it into `rsrc_windows_amd64.syso` with `tools/makeicon` (no downloads), which Go builds into the .exe; the window uses it via `IconId: 1`. Don't set the icon by editing the .exe — the next build replaces it.
+- `update.go`, `update_windows.go` — update check (also the Library's "⬆ Check for updates" button → `kitCheckUpdate` binding → `offerUpdate(w, true)`, which always answers): a few seconds after opening, the app asks GitHub for the latest release of `DanteRego/Yupoo-Store-app`; if its tag (e.g. v1.0.1) is newer than `AppVersion`, a Yes/No box explains what's new and that data isn't touched. Yes downloads the release's `YupooLibrary.exe`, renames the running exe to `.old`, puts the new one in place and restarts (the new copy deletes `.old`). Raise `AppVersion` for every release, to the same number as the tag, BEFORE building (steps in HOW-TO-TWEAK.txt) — a mismatch used to cause an update loop; now `Settings.UpdatedTo` stops a mislabelled release being offered again after it was installed. `KIT_UPDATE_API` overrides the GitHub address for testing.
+- `.github/workflows/release.yml` — automatic releases: on every push to main, GitHub Actions reads `AppVersion`; if no release with that tag exists, it builds YupooLibrary.exe on Windows (icon included), checks the version is inside it, and publishes the release with notes from the matching `## <version>` section of `WHATS-NEW.txt` (else commit messages since the last tag). Tags are plain numbers (1.0.3, no "v"). To release: raise AppVersion, add the WHATS-NEW section, push.
+- App icon + program details: `Icon Yupoo.ico`. `build.bat` turns it into `rsrc_windows_amd64.syso` with `tools/makeicon` (no downloads) — icon, VERSIONINFO (name, publisher "DanteRego", version from `AppVersion`) and a manifest — which Go builds into the .exe. Builds are NOT stripped (no `-s -w`): unsigned, stripped Go programs with no version info get falsely flagged by Windows Defender ("Trojan:Win32/Bearfoos.A!ml", "Wacatac.B!ml") — don't add `-s -w` back; the window uses it via `IconId: 1`. Don't set the icon by editing the .exe — the next build replaces it.
 - Internal names like `kitSave`, `X-Kit-Token` and `KIT_DATA_DIR` are leftovers from the old name; the owner never sees them.
 
 ## Rules

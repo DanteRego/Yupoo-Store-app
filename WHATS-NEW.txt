@@ -1,0 +1,14 @@
+What's new — this file becomes the text of each release (people see it in the "Update available" box).
+
+How to use it: before raising the version, add a section at the TOP that starts with
+"## " and the new version number, then a few short lines. Keep each section under about 600 characters.
+If a version has no section here, the release uses your commit messages instead.
+
+## 1.0.3
+What's new in 1.0.3
+
+- ⚙ Settings page: choose the language, change where cover photos are saved (your photos are moved for you), and see where your library and exports are kept.
+- 中文: the whole app can now be switched to Chinese.
+- 🩺 Check-up in Settings: finds and explains anything that isn't working.
+- Pasting a link for a store you already have now warns you straight away.
+- Fix: updating can no longer get stuck offering the same version again.

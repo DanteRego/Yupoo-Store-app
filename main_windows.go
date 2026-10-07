@@ -57,6 +57,8 @@ func main() {
 	})
 	mainWindow = uintptr(w.Window())                                 // so the folder picker (Settings) opens on top of the app
 	uiLang = func() string { return app.lib.GetSettings().Language } // update messages in your language
+	updatedTo = func() string { return app.lib.GetSettings().UpdatedTo }
+	markUpdated = app.lib.SetUpdatedTo
 	// The Library's "Check for updates" button.
 	_ = w.Bind("kitCheckUpdate", func() { go offerUpdate(w, true) })
 	w.Init(bridgeJS(app.baseURL) + crawlbarJS + captureJS)

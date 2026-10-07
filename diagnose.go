@@ -213,6 +213,10 @@ func (a *App) Diagnose() Diagnosis {
 	if rel, err := CheckForUpdate(); err != nil {
 		add("warn", "Update check", "检查更新", "GitHub couldn't be reached ("+shortErr(err)+"), so new versions can't be found right now.",
 			"无法连接 GitHub（"+shortErr(err)+"），暂时无法发现新版本。")
+	} else if rel != nil && l.GetSettings().UpdatedTo == rel.Version {
+		add("warn", "Update check", "检查更新",
+			"Release "+rel.Version+" is installed, but its program says version "+AppVersion+" inside (the version number wasn't raised before it was built). It won't be offered again; the release's YupooLibrary.exe needs rebuilding with AppVersion "+rel.Version+".",
+			"已安装版本 "+rel.Version+"，但它的程序内部写的是 "+AppVersion+"（编译前没有改版本号）。它不会再被反复提示；需要用 AppVersion "+rel.Version+" 重新编译发布里的 YupooLibrary.exe。")
 	} else if rel != nil {
 		add("warn", "Update check", "检查更新", "Version "+rel.Version+" is available — click Check for updates.", "有新版本 "+rel.Version+" 可用——请点“检查更新”。")
 	} else {

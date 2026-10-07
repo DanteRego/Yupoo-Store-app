@@ -54,6 +54,10 @@ type Settings struct {
 	// M:\Yupoo Library\Thumbnails if the M: drive is there, otherwise next to library.json).
 	// Only changed through SetThumbDir, which can also move the photos.
 	ThumbsDir string `json:"thumbsDir,omitempty"`
+	// UpdatedTo is the release the app last installed through "Update now" (e.g. "1.0.2"). If that
+	// release still looks newer after restarting, its program was built with an old AppVersion — so it
+	// isn't offered again (no update loop). Only changed through SetUpdatedTo.
+	UpdatedTo string `json:"updatedTo,omitempty"`
 }
 
 type libraryFile struct {
@@ -389,6 +393,7 @@ func (l *Library) SetSettings(s Settings) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	s.ThumbsDir = l.data.Settings.ThumbsDir
+	s.UpdatedTo = l.data.Settings.UpdatedTo
 	l.data.Settings = s
 	l.scheduleSave()
 }
@@ -550,4 +555,12 @@ func (l *Library) myTeams() map[string]string {
 		}
 	}
 	return out
+}
+
+// SetUpdatedTo remembers which release "Update now" just installed (see Settings.UpdatedTo).
+func (l *Library) SetUpdatedTo(version string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.data.Settings.UpdatedTo = version
+	l.scheduleSave()
 }
