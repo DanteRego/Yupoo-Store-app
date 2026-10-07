@@ -145,7 +145,8 @@ async function load() {
     const u = document.querySelector('[data-act="update"]'); if (u) u.title = L("You have version " + d.appVersion + " — see if a newer one is out", "你的版本是 " + d.appVersion + "——看看有没有新版本");
   }
   S.collections = d.collections || [];
-  S.locked = d.lockedStores || []; // stores the ✨ New Additions check can't read without a password
+  S.locked = d.lockedStores || [];
+  S.storeTotals = d.storeTotals || {}; // how many albums each store has on Yupoo (store address -> number) // stores the ✨ New Additions check can't read without a password
   matcher = YO_buildMatcher(allAliases());
   cache.clear();
 }

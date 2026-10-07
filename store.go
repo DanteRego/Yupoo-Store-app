@@ -81,6 +81,23 @@ type libraryFile struct {
 	StorePasswords map[string]string `json:"storePasswords,omitempty"`
 	// StoreLocked: stores the start-up check couldn't read because they need a password (store -> when).
 	StoreLocked map[string]int64 `json:"storeLocked,omitempty"`
+	// StoreTotals: how many albums each store has on Yupoo ("共N个相册"), as the start-up check last saw
+	// it (store address -> number). Used to tell whether a store is completely saved.
+	StoreTotals map[string]int `json:"storeTotals,omitempty"`
+	// StoreFill: stores the start-up check is filling in because they weren't completely saved.
+	StoreFill map[string]*StoreFill `json:"storeFill,omitempty"`
+	// LastNewCheck is when the new-items check last looked through every store (it runs by itself
+	// every 2 hours, also counting time the app was closed; "⟳ Check now" runs it any time).
+	LastNewCheck int64 `json:"lastNewCheck,omitempty"`
+}
+
+// StoreFill is how far the start-up check got filling in a store that wasn't completely saved,
+// so it carries on from there the next time the app opens.
+type StoreFill struct {
+	Page  int  `json:"page"`  // next page to read
+	Total int  `json:"total"` // the store's total when this was last worked on
+	Done  bool `json:"done"`  // every page was read when the store had this total
+	Gap   int  `json:"gap"`   // albums still missing after reading every page (ones the reader can't see)
 }
 
 type thumbJob struct{ key, host, cover string }
@@ -144,6 +161,12 @@ func OpenLibrary(dir, thumbDir string) (*Library, error) {
 	}
 	if l.data.StoreLocked == nil {
 		l.data.StoreLocked = map[string]int64{}
+	}
+	if l.data.StoreTotals == nil {
+		l.data.StoreTotals = map[string]int{}
+	}
+	if l.data.StoreFill == nil {
+		l.data.StoreFill = map[string]*StoreFill{}
 	}
 	l.ensureMyTeamsFile()
 	go l.thumbWorker()
@@ -336,6 +359,8 @@ func (l *Library) RemoveStore(store string) int {
 		if a.Store == store {
 			keys = append(keys, k)
 			delete(l.data.NewCheck, strings.ToLower(a.Host))
+			delete(l.data.StoreTotals, strings.ToLower(a.Host))
+			delete(l.data.StoreFill, strings.ToLower(a.Host))
 		}
 	}
 	for _, k := range keys {
@@ -442,6 +467,7 @@ func (l *Library) StateJSON() ([]byte, error) {
 		"storeCategories": l.data.StoreCategories,
 		"collections":     l.data.Collections,
 		"lockedStores":    l.lockedStores(),
+		"storeTotals":     l.data.StoreTotals,
 		"appVersion":      AppVersion,
 		"version":         l.version,
 	})

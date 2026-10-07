@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,30 +33,46 @@ import (
 
 // NewCheckStatus is what the Library page shows about the check.
 type NewCheckStatus struct {
-	Running  bool   `json:"running"`
-	Stores   int    `json:"stores"`  // how many stores to look through
-	Done     int    `json:"done"`    // how many are finished
-	Store    string `json:"store"`   // the store being looked at now
-	Found    int    `json:"found"`   // new items found this time
-	First    int    `json:"first"`   // stores checked for the first time (nothing to compare with yet)
-	Skipped  int    `json:"skipped"` // stores whose page couldn't be opened
-	Locked   int    `json:"locked"`  // stores that showed no items (they need a password)
-	Failed   bool   `json:"failed"`  // Yupoo stopped answering, so the rest waits for next time
-	Started  int64  `json:"started"`
-	Finished int64  `json:"finished"`
+	Running  bool   `json:"running"`  // reading Yupoo pages right now (checking or filling in)
+	Checking bool   `json:"checking"` // the new-items check is running (not just filling in)
+	Stores   int    `json:"stores"`   // how many stores to look through
+	Done     int    `json:"done"`     // how many are finished
+	Store    string `json:"store"`    // the store being looked at now
+	Found    int    `json:"found"`    // new items found by the last check
+	First    int    `json:"first"`    // stores checked for the first time (nothing to compare with yet)
+	Skipped  int    `json:"skipped"`  // stores whose page couldn't be opened
+	Locked   int    `json:"locked"`   // stores that showed no items (they need a password)
+	Failed   bool   `json:"failed"`   // Yupoo stopped answering, so the rest waits for a while
+	Started  int64  `json:"started"`  // when the app started looking (this session)
+	Finished int64  `json:"finished"` // when the last new-items check finished (this session)
+	// LastCheck is when the last complete new-items check was (also from earlier sessions);
+	// NextCheck is when the next automatic one is due (every 2 hours).
+	LastCheck int64 `json:"lastCheck"`
+	NextCheck int64 `json:"nextCheck"`
+	// Filling in stores that weren't completely saved.
+	Unfinished int    `json:"unfinished"` // stores that aren't completely saved yet
+	FillStore  string `json:"fillStore"`  // the store being filled in now
+	FillPage   int    `json:"fillPage"`   // the page it's on
+	FillPages  int    `json:"fillPages"`  // how many pages that store has
+	Filled     int    `json:"filled"`     // items added by filling in (this session)
 }
 
+// How often the new-items check runs by itself. "⟳ Check now" runs it at any time.
+const newCheckEvery = 2 * time.Hour
+
 type NewChecker struct {
-	mu      sync.Mutex
-	lib     *Library
-	crawl   *Crawler
-	st      NewCheckStatus
-	queued  []string // stores to check after the running check (e.g. a password was just entered)
-	fetched bool     // a page has been read already, so wait before the next one
+	mu       sync.Mutex
+	lib      *Library
+	crawl    *Crawler
+	st       NewCheckStatus
+	queued   []string      // stores to check soon (e.g. a password was just entered)
+	checkNow bool          // "⟳ Check now" was pressed
+	wake     chan struct{} // wakes the worker up when it's waiting
+	fetched  bool          // a page has been read already, so wait before the next one
 }
 
 func NewNewChecker(lib *Library, crawl *Crawler) *NewChecker {
-	return &NewChecker{lib: lib, crawl: crawl}
+	return &NewChecker{lib: lib, crawl: crawl, wake: make(chan struct{}, 1)}
 }
 
 func (c *NewChecker) Status() NewCheckStatus {
@@ -70,42 +87,175 @@ func (c *NewChecker) update(f func(s *NewCheckStatus)) {
 	f(&c.st)
 }
 
-// Start checks the given store addresses, or every store when hosts is nil. If a check is already
-// running, the given stores are checked when it gets to the end.
+func (c *NewChecker) poke() {
+	select {
+	case c.wake <- struct{}{}:
+	default:
+	}
+}
+
+// Start: with nil, "⟳ Check now" — check every store for new items right away (if it's filling in a
+// store, it stops after the page it's on, checks, then carries on filling). With store addresses
+// (e.g. a password was just entered), checks just those, also right away.
 func (c *NewChecker) Start(hosts []string) NewCheckStatus {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.st.Running {
-		c.queued = append(c.queued, hosts...)
-		return c.st
-	}
-	c.st = NewCheckStatus{Running: true, Started: time.Now().UnixMilli()}
-	c.fetched = false
 	if hosts == nil {
-		hosts = c.lib.storeHosts()
+		if !c.st.Checking {
+			c.checkNow = true
+		}
+	} else {
+		c.queued = append(c.queued, hosts...)
 	}
-	go c.run(hosts)
-	return c.st
+	st := c.st
+	c.mu.Unlock()
+	c.poke()
+	return st
 }
 
 // Pages read per store at most in one check (a store adding more than this between two
-// openings of the app is very unlikely).
+// checks is very unlikely).
 const newCheckMaxPages = 30
 
-func (c *NewChecker) run(hosts []string) {
-	for len(hosts) > 0 {
-		c.update(func(s *NewCheckStatus) { s.Stores += len(hosts) })
-		if !c.checkStores(hosts) {
-			break // Yupoo stopped answering
+// Run is the background worker, started once when the app opens. First it fills in stores that
+// aren't completely saved; the new-items check runs when it's due (every 2 hours, between stores
+// being filled in) or right away when you press "⟳ Check now".
+func (c *NewChecker) Run() {
+	last := c.lib.lastNewCheck()
+	c.update(func(s *NewCheckStatus) {
+		s.Started, s.LastCheck = time.Now().UnixMilli(), last
+		s.NextCheck = c.nextDue(last)
+	})
+	for {
+		c.update(func(s *NewCheckStatus) { s.Running = true })
+		ok := c.runQueued()
+		// Filling in comes first; only "Check now" goes ahead of it.
+		if ok && c.checkDue(true) {
+			ok = c.newItemsCheck()
+		}
+		for ok {
+			host := c.lib.nextStoreToFill()
+			c.update(func(s *NewCheckStatus) { s.Unfinished = c.lib.countStoresToFill() })
+			if host == "" {
+				break
+			}
+			ok = c.fillStore(host)
+			// Between stores: an automatic check that came due, or anything asked for meanwhile.
+			if ok && c.checkDue(false) {
+				ok = c.newItemsCheck()
+			}
+		}
+		// Every store filled in: now the automatic check, if it's due. It can find stores that need
+		// filling in (e.g. the first time), so go round again afterwards.
+		if ok && c.checkDue(false) {
+			if ok = c.newItemsCheck(); ok {
+				continue
+			}
+		}
+		// Nothing to do: wait until the next check is due, or until "Check now" / a password.
+		// If Yupoo stopped answering, try again in 15 minutes.
+		wait := time.Until(time.UnixMilli(c.Status().NextCheck))
+		if !ok {
+			wait = 15 * time.Minute
 		}
 		c.mu.Lock()
-		hosts, c.queued = c.queued, nil
+		c.st.Running, c.st.Store, c.st.FillStore = false, "", ""
 		c.mu.Unlock()
+		if wait < time.Second {
+			wait = time.Second
+		}
+		select {
+		case <-c.wake:
+		case <-time.After(wait):
+		}
+		c.update(func(s *NewCheckStatus) { s.Failed = false })
+	}
+}
+
+func (c *NewChecker) nextDue(last int64) int64 {
+	if last == 0 {
+		return time.Now().UnixMilli()
+	}
+	return time.UnixMilli(last).Add(newCheckEvery).UnixMilli()
+}
+
+// checkDue: "Check now" was pressed, or (unless onlyAsked) 2 hours have passed since the last check.
+func (c *NewChecker) checkDue(onlyAsked bool) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.checkNow {
+		return true
+	}
+	return !onlyAsked && time.Now().UnixMilli() >= c.st.NextCheck
+}
+
+// newItemsCheck looks through every store for new items. False if Yupoo stopped answering.
+func (c *NewChecker) newItemsCheck() bool {
+	hosts := c.lib.storeHosts()
+	c.mu.Lock()
+	c.checkNow = false
+	c.st.Checking = true
+	c.st.Stores, c.st.Done, c.st.Found, c.st.First, c.st.Skipped, c.st.Locked = len(hosts), 0, 0, 0, 0, 0
+	c.mu.Unlock()
+	ok := c.checkStores(hosts)
+	now := time.Now().UnixMilli()
+	if ok {
+		c.lib.setLastNewCheck(now)
 	}
 	c.mu.Lock()
-	c.queued = nil
-	c.st.Running, c.st.Store, c.st.Finished = false, "", time.Now().UnixMilli()
+	c.st.Checking, c.st.Store, c.st.Finished = false, "", now
+	if ok {
+		c.st.LastCheck = now
+		c.st.NextCheck = c.nextDue(now)
+	}
 	c.mu.Unlock()
+	return ok
+}
+
+// runQueued checks stores asked for meanwhile (e.g. a password was just entered). False if Yupoo
+// stopped answering.
+func (c *NewChecker) runQueued() bool {
+	c.mu.Lock()
+	q := c.queued
+	c.queued = nil
+	c.mu.Unlock()
+	if len(q) == 0 {
+		return true
+	}
+	c.mu.Lock()
+	c.st.Stores, c.st.Done = len(q), 0
+	c.mu.Unlock()
+	return c.checkStores(q)
+}
+
+// pace waits between pages: 1.5–2.5 seconds so Yupoo doesn't block you, and never at the same
+// time as "Save whole store".
+func (c *NewChecker) pace() {
+	if c.fetched {
+		time.Sleep(1500*time.Millisecond + time.Duration(rand.Intn(1000))*time.Millisecond)
+	}
+	for c.crawl.Status().Running {
+		time.Sleep(3 * time.Second)
+	}
+	c.fetched = true
+}
+
+func (c *NewChecker) cookieFor(store string) string {
+	if pw := c.lib.StorePassword(store); pw != "" {
+		return "indexlockcode=" + encodeURIComponent(pw)
+	}
+	return ""
+}
+
+// The store's total on its first page: "共3995个相册" (or "in total 3995 albums").
+var reStoreTotal = regexp.MustCompile(`共\s*([0-9]+)\s*个相册|in\s+total\s+([0-9]+)\s+albums?`)
+
+func storeTotal(body string) int {
+	m := reStoreTotal.FindStringSubmatch(body)
+	if m == nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(m[1] + m[2])
+	return n
 }
 
 // checkStores looks through the given stores one by one. It returns false if Yupoo stopped answering.
@@ -115,25 +265,14 @@ func (c *NewChecker) checkStores(hosts []string) bool {
 		store := strings.Split(host, ".")[0]
 		c.update(func(s *NewCheckStatus) { s.Store = store })
 		mark, known := c.lib.newCheckMark(host)
-		cookie := ""
-		if pw := c.lib.StorePassword(store); pw != "" {
-			cookie = "indexlockcode=" + encodeURIComponent(pw)
-		}
+		cookie := c.cookieFor(store)
 		list := &url.URL{Scheme: "https", Host: host, Path: "/categories"}
 		top, prevSig, maxPage, failed, locked := mark, "", 0, false, false
 		for page := 1; page <= newCheckMaxPages; page++ {
 			if !c.lib.hasHost(host) {
 				break // the store was removed from the library meanwhile
 			}
-			// Go slowly so Yupoo doesn't block you (1.5–2.5 seconds between pages), and never at
-			// the same time as "Save whole store".
-			if c.fetched {
-				time.Sleep(1500*time.Millisecond + time.Duration(rand.Intn(1000))*time.Millisecond)
-			}
-			for c.crawl.Status().Running {
-				time.Sleep(3 * time.Second)
-			}
-			c.fetched = true
+			c.pace()
 			body, err := fetchPage(pageURLFor(list, page), "https://"+host+"/", cookie)
 			if err != nil {
 				failed = true
@@ -147,6 +286,10 @@ func (c *NewChecker) checkStores(hosts []string) bool {
 				if len(found) == 0 {
 					locked = true
 					break
+				}
+				// Is the whole store saved? If not, it's filled in after the quick check.
+				if total := storeTotal(body); total > 0 {
+					c.lib.setStoreTotal(host, total)
 				}
 			}
 			ids := make([]string, len(found))
@@ -206,12 +349,80 @@ func (c *NewChecker) checkStores(hosts []string) bool {
 	return true
 }
 
+// fillStore reads every page of a store that isn't completely saved and saves what's missing
+// (as ordinary items, not New Additions — they're old items you just didn't have). It notes the
+// page it got to, so it carries on from there next time. False if Yupoo stopped answering.
+func (c *NewChecker) fillStore(host string) bool {
+	store := strings.Split(host, ".")[0]
+	cookie := c.cookieFor(store)
+	total := c.lib.storeTotalOf(host)
+	start := 1
+	if f, ok := c.lib.storeFill(host); ok && !f.Done && f.Page > 1 {
+		// Carry on where it stopped. The store may have added items since, which pushes
+		// everything further back, so start a little earlier (already-saved items are skipped).
+		start = f.Page - 1 - max(0, total-f.Total)/100
+		if start < 1 {
+			start = 1
+		}
+	}
+	list := &url.URL{Scheme: "https", Host: host, Path: "/categories"}
+	c.update(func(s *NewCheckStatus) { s.FillStore, s.FillPage, s.FillPages = store, start, 0 })
+	maxPage, prevSig := 0, ""
+	for page := start; page <= 5000; page++ {
+		if !c.lib.hasHost(host) {
+			return true // removed from the library meanwhile
+		}
+		// Stores asked for meanwhile (e.g. a password was just entered) and "⟳ Check now" go
+		// first; then filling carries on from this page.
+		if !c.runQueued() {
+			return false
+		}
+		if c.checkDue(true) && !c.newItemsCheck() {
+			return false
+		}
+		c.update(func(s *NewCheckStatus) { s.Store = "" })
+		c.pace()
+		body, err := fetchPage(pageURLFor(list, page), "https://"+host+"/", cookie)
+		if err != nil {
+			c.update(func(s *NewCheckStatus) { s.Failed = true })
+			return false // carries on from this page next time
+		}
+		if n := detectMaxPage(body); n > maxPage {
+			maxPage = n
+		}
+		found := extractAlbums(body, host)
+		ids := make([]string, len(found))
+		for i, a := range found {
+			ids[i] = a.ID
+		}
+		sig := strings.Join(ids, ",")
+		if len(found) == 0 || sig == prevSig {
+			break
+		}
+		added, _ := c.lib.saveAlbums(found, false)
+		c.lib.setStoreFill(host, StoreFill{Page: page + 1, Total: total})
+		c.update(func(s *NewCheckStatus) { s.Filled += added; s.FillPage, s.FillPages = page, maxPage })
+		if maxPage > 0 && page >= maxPage {
+			break
+		}
+		prevSig = sig
+	}
+	// Every page read. Some albums may still be missing (ones the reader can't see); remember how
+	// many, so the store is only filled in again if more go missing.
+	c.lib.setStoreFill(host, StoreFill{Done: true, Total: total, Gap: max(0, total-c.lib.countHost(host))})
+	c.update(func(s *NewCheckStatus) { s.FillStore = "" })
+	return true
+}
+
 // ---------- store passwords ----------
 
 // encodeURIComponent writes a password the way Yupoo's own page puts it in its cookie.
 func encodeURIComponent(s string) string { return strings.ReplaceAll(url.QueryEscape(s), "+", "%20") }
 
-var errWrongPassword = errors.New("wrong password")
+var (
+	errWrongPassword    = errors.New("wrong password")
+	errNoPasswordNeeded = errors.New("no password needed")
+)
 
 // checkStorePassword asks Yupoo whether pw is the password for store (the same question
 // Yupoo's own password box asks). needs is false when the store has no password at all.
@@ -261,6 +472,14 @@ func (a *App) EnterStorePassword(store, pw string) error {
 	}
 	if needs && !valid {
 		return errWrongPassword
+	}
+	if !needs {
+		// The store took its password off: nothing to save, just check it again.
+		a.lib.SetStorePassword(store, "")
+		if host := a.lib.hostOf(store); host != "" {
+			a.check.Start([]string{host})
+		}
+		return errNoPasswordNeeded
 	}
 	a.lib.SetStorePassword(store, pw)
 	if host := a.lib.hostOf(store); host != "" {
@@ -391,6 +610,103 @@ func (l *Library) setStoreLocked(store string, locked bool) {
 		return
 	}
 	l.scheduleSave()
+}
+
+// ---------- is the whole store saved? ----------
+
+// countHost is how many items from this store address are in the library.
+func (l *Library) countHost(host string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, a := range l.data.Albums {
+		if strings.EqualFold(a.Host, host) {
+			n++
+		}
+	}
+	return n
+}
+
+func (l *Library) storeTotalOf(host string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.data.StoreTotals[host]
+}
+
+func (l *Library) setStoreTotal(host string, total int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.data.StoreTotals[host] != total {
+		l.data.StoreTotals[host] = total
+		l.scheduleSave()
+	}
+}
+
+func (l *Library) storeFill(host string) (StoreFill, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if f := l.data.StoreFill[host]; f != nil {
+		return *f, true
+	}
+	return StoreFill{}, false
+}
+
+func (l *Library) setStoreFill(host string, f StoreFill) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.data.StoreFill[host] = &f
+	l.scheduleSave()
+}
+
+// nextStoreToFill is a store that isn't completely saved (smallest gap first, so small stores
+// finish quickly instead of waiting behind a huge one), or "" if every store is complete.
+func (l *Library) nextStoreToFill() string {
+	best, bestGap := "", 0
+	for _, h := range l.storeHosts() {
+		if !l.needsFill(h) || l.storeIsLocked(strings.Split(h, ".")[0]) {
+			continue
+		}
+		if gap := l.storeTotalOf(h) - l.countHost(h); best == "" || gap < bestGap {
+			best, bestGap = h, gap
+		}
+	}
+	return best
+}
+
+func (l *Library) countStoresToFill() int {
+	n := 0
+	for _, h := range l.storeHosts() {
+		if l.needsFill(h) && !l.storeIsLocked(strings.Split(h, ".")[0]) {
+			n++
+		}
+	}
+	return n
+}
+
+func (l *Library) lastNewCheck() int64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.data.LastNewCheck
+}
+
+func (l *Library) setLastNewCheck(t int64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.data.LastNewCheck = t
+	l.scheduleSave()
+}
+
+// needsFill: Yupoo shows more albums for this store than the library has (and more are missing
+// than last time every page was read — a few the reader can't see don't count every time).
+func (l *Library) needsFill(host string) bool {
+	total, have := l.storeTotalOf(host), l.countHost(host)
+	if total == 0 || have >= total {
+		return false
+	}
+	if f, ok := l.storeFill(host); ok && f.Done && total-have <= f.Gap {
+		return false
+	}
+	return true
 }
 
 // LockedStore is one entry in the Library's "🔒 Needs a password" list.

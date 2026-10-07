@@ -176,8 +176,9 @@
     const $ = (s) => shadow.querySelector(s);
 
     // ---------- the Back button, pinned to the top left ----------
+    // Below Yupoo's own top bar (60px tall), so it's never on top of the Yupoo logo.
     const backHost = document.createElement("div");
-    backHost.style.cssText = "position:fixed;left:12px;top:12px;z-index:2147483646;";
+    backHost.style.cssText = "position:fixed;left:12px;top:76px;z-index:2147483646;";
     const backShadow = backHost.attachShadow({ mode: "open" });
     backShadow.innerHTML = `<style>
       :host { all: initial; }

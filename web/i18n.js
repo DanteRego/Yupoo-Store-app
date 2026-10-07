@@ -41,7 +41,7 @@ const I18N_ZH = {
   "Drag to resize — double-click for the normal width": "拖动调整宽度——双击恢复默认宽度",
   "Show subcategories": "显示子分类", "Hide subcategories": "隐藏子分类",
   // ✨ New Additions
-  "✨ New Additions": "✨ 新上架", "Items your stores added since you last opened the app": "上次打开应用之后店铺新上架的商品",
+  "✨ New Additions": "✨ 新上架", "Items your stores added since you last opened the app": "上次打开应用之后店铺新上架的商品", "Items your stores have added (checked every 2 hours)": "店铺新上架的商品（每 2 小时检查一次）",
   "⟳ Check now": "⟳ 立即检查", "Look through your stores for new items again": "再检查一次店铺的新品", "◀ All items": "◀ 全部商品",
   "Take these items off New Additions (they stay in your library)": "把这些商品移出新上架（它们仍在图库里）", "NEW": "新",
   "Seen it — take it off New Additions (it stays in your library)": "看过了——移出新上架（仍在图库里）", "Show": "查看",
@@ -55,7 +55,7 @@ const I18N_ZH = {
   "Category, then brand / team": "按分类，再按品牌 / 球队", "Brand A–Z": "品牌 A–Z", "Season: newest first": "赛季：从新到旧",
   "Season: oldest first": "赛季：从旧到新", "Recently saved": "最近保存", "✕ Clear filters": "✕ 清除筛选",
   "☑ Select": "☑ 多选", "☑ Selecting…": "☑ 选择中…", "Select several items to move them to a category at once": "一次选择多个商品，批量改分类或加入收藏",
-  "Search…": "搜索…", "No brand in title": "标题里没有品牌", "No team": "没有球队", "No season": "没有赛季",
+  "Search…": "搜索…", "Search stores…": "搜索店铺…", "No brand in title": "标题里没有品牌", "No team": "没有球队", "No season": "没有赛季",
   "No kit type": "没有球衣类型", "No extras": "没有附加", "⚠ Kits with no team": "⚠ 没识别出球队的球衣",
   "60 per page": "每页 60", "120 per page": "每页 120", "240 per page": "每页 240", "Items per page": "每页显示数量",
   "Previous page": "上一页", "Next page": "下一页", "Pages": "页码",

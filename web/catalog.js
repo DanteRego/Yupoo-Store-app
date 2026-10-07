@@ -71,9 +71,9 @@ function filteredEntries() {
 function renderSidebar() {
   const allKeys = new Set();
   S.collections.forEach((c) => c.items.forEach((it) => allKeys.add(it.key)));
-  let html = S.collections.length > 1 || S.colId === ""
-    ? `<div class="item top ${S.colId === "" ? "on" : ""}" role="button" tabindex="0" data-col=""><span class="name">All collected items</span><span class="c">${allKeys.size}</span></div>`
-    : "";
+  // "All items" (everything in every collection) always sits at the top left, above the collections.
+  $(".allcols").innerHTML = `<div class="item top ${S.colId === "" ? "on" : ""}" role="button" tabindex="0" data-col=""><span class="name">All items</span><span class="c">${allKeys.size}</span></div>`;
+  let html = "";
   S.collections.forEach((c) => {
     html += `<div class="item ${S.colId === c.id ? "on" : ""}" role="button" tabindex="0" data-col="${esc(c.id)}">
       <span class="name" title="${esc(c.name)}">${esc(c.name)}</span>
@@ -88,7 +88,7 @@ function renderSidebar() {
 
 function renderGrid() {
   const c = current();
-  $(".colname").textContent = c ? c.name : t(S.collections.length ? "All collected items" : "Your Wishlist");
+  $(".colname").textContent = c ? c.name : t(S.collections.length ? "All items" : "Your Wishlist");
   document.querySelectorAll(".needcol").forEach((b) => { b.hidden = !c; });
   $('[data-act="csv"]').hidden = !S.collections.length;
   $(".filters").hidden = !S.collections.length;

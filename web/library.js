@@ -79,6 +79,9 @@ function setCatOpen(top, open) {
 }
 const catRank = (path) => { const [c, s] = path.split(" › "); return YO_categoryRank(c, s || ""); };
 
+// How many albums a store has on Yupoo (as the start-up check last saw it), or 0 if not known yet.
+const storeTotalOf = (host) => (S.storeTotals && S.storeTotals[String(host || "").toLowerCase()]) || 0;
+
 function renderStores() {
   const counts = new Map(), hosts = new Map();
   inView().forEach((a) => { counts.set(a.store, (counts.get(a.store) || 0) + 1); hosts.set(a.store, a.host); });
@@ -86,9 +89,23 @@ function renderStores() {
   const picked = S.store && !counts.has(S.store) && all().find((a) => a.store === S.store);
   if (picked) { counts.set(S.store, 0); hosts.set(S.store, picked.host); }
   let html = item("store", "", "All stores", inView().length, S.store === "");
-  [...counts.keys()].sort((a, b) => storeName(a).localeCompare(storeName(b))).forEach((s) => {
-    html += item("store", s, storeName(s), counts.get(s), S.store === s, "", "https://" + hosts.get(s) + "/categories", true);
+  // The search box above the list: matches the name you gave a store, and also its original name
+  // (and address) from the link — that one stays searchable even after renaming.
+  const q = ($(".storeq") && $(".storeq").value || "").trim().toLowerCase();
+  const matches = (s) => !q || storeName(s).toLowerCase().includes(q) || s.toLowerCase().includes(q) ||
+    String(hosts.get(s) || "").toLowerCase().includes(q) || s === S.store;
+  const shown = [...counts.keys()].filter(matches);
+  shown.sort((a, b) => storeName(a).localeCompare(storeName(b))).forEach((s) => {
+    // ⏳ = only part of this store is saved so far (Yupoo shows more albums than you have).
+    const total = S.view === "new" ? 0 : storeTotalOf(hosts.get(s));
+    const n = total > counts.get(s)
+      ? `<span title="${esc(L(`${counts.get(s).toLocaleString()} of ${total.toLocaleString()} saved — the rest is filled in each time the app opens`, `已保存 ${num(counts.get(s))} / ${num(total)} 件——每次打开应用都会在后台补全`))}">${counts.get(s)} ⏳</span>`
+      : counts.get(s);
+    html += item("store", s, storeName(s), n, S.store === s, "", "https://" + hosts.get(s) + "/categories", true)
+      // A renamed store: its original name shows when you hover over it.
+      .replace(`title="${esc(storeName(s))}"`, `title="${esc(storeName(s) !== s ? storeName(s) + " — " + L("original name: ", "原名：") + s : s)}"`);
   });
+  if (q && !shown.length) html += `<div class="summary" style="padding:4px 8px">${esc(L(`No store matches “${q}”.`, `没有店铺符合“${q}”。`))}</div>`;
   $(".stores").innerHTML = html;
 }
 
@@ -102,7 +119,7 @@ function renderNewItem() {
   const n = all().filter((a) => a.newAt).length;
   const busy = newCheck && newCheck.running;
   $(".newlist").innerHTML = `<div class="item newadd ${S.view === "new" ? "on" : ""} ${n ? "has" : ""}" role="button" tabindex="0" data-view="new"
-    title="${esc(busy ? L("Checking your stores for new items…", "正在检查店铺的新品…") : t("Items your stores added since you last opened the app"))}">
+    title="${esc(busy ? (newCheck.checking ? L("Checking your stores for new items…", "正在检查店铺的新品…") : L("Filling in stores you only partly saved…", "正在补全只保存了一部分的店铺…")) : t("Items your stores have added (checked every 2 hours)"))}">
     <span class="name">${t("✨ New Additions")}${busy ? ` <span class="spinning">⟳</span>` : ""}</span><span class="c">${n}</span></div>` +
     lockedList();
 }
@@ -116,25 +133,63 @@ function lockedList() {
       `<button data-store-pw="${esc(s.store)}">${t(s.saved ? "New password" : "Enter password")}</button></div>`).join("") + `</div>`;
 }
 
-async function enterStorePassword(store) {
+// "Enter password": a small window that checks the password with Yupoo straight away and says
+// ✓ Correct or ✗ Incorrect right there (it stays open after a wrong one, so you can try again).
+function enterStorePassword(store) {
   const s = (S.locked || []).find((x) => x.store === store) || { store, saved: false };
-  const input = prompt(L(`Password for “${storeName(store)}”\n\nThis store is locked with a password (the supplier gives it to you). Type it here so the app can check this store for new items too.` +
-    (s.saved ? "\n\nThe password saved before stopped working — the store may have changed it." : ""),
-    `“${storeName(store)}”的密码\n\n这个店铺设了密码（供应商会告诉你）。在这里输入，应用就能检查这个店铺的新品。` +
-    (s.saved ? "\n\n之前保存的密码失效了——店铺可能改了密码。" : "")), "");
-  if (input === null || !input.trim()) return;
-  toast(L("Checking the password with Yupoo…", "正在向 Yupoo 验证密码…"));
-  try {
-    newCheck = await call("POST", "/api/store-password", { store, password: input.trim() });
-  } catch (e) {
-    toast(e.message === "wrong password"
-      ? L(`That isn't the right password for “${storeName(store)}”. Check it with the supplier and try again.`, `“${storeName(store)}”的密码不对。请向供应商确认后再试。`)
-      : L("Couldn't save the password: ", "无法保存密码：") + e.message);
-    return;
-  }
-  toast(L(`Password saved — checking “${storeName(store)}” now.`, `密码已保存——正在检查“${storeName(store)}”。`));
-  renderNewItem(); renderNewHead();
-  pollNewCheck();
+  const name = storeName(store);
+  const box = document.createElement("div");
+  box.className = "pwmodal";
+  box.innerHTML = `<form class="pwbox">
+      <h3>${esc(L(`Password for “${name}”`, `“${name}”的密码`))}</h3>
+      <p class="hint">${esc(L("This store is locked with a password (the supplier gives it to you). Once it's saved, the app can check this store for new items too.",
+        "这个店铺设了密码（供应商会告诉你）。保存后，应用就能检查这个店铺的新品。"))}${s.saved
+        ? `<br><span class="warnmark">⚠ ${esc(L("The password saved before stopped working — the store may have changed it.", "之前保存的密码失效了——店铺可能改了密码。"))}</span>` : ""}</p>
+      <input type="text" class="pwinput" autocomplete="off" spellcheck="false" placeholder="${esc(L("Type the password", "输入密码"))}">
+      <div class="pwmsg" hidden></div>
+      <div class="btnrow">
+        <button type="submit" class="primary pwok">${esc(L("Check password", "验证密码"))}</button>
+        <button type="button" class="pwcancel">${esc(L("Cancel", "取消"))}</button>
+      </div>
+    </form>`;
+  document.body.appendChild(box);
+  const input = box.querySelector(".pwinput"), msg = box.querySelector(".pwmsg"), ok = box.querySelector(".pwok");
+  const close = () => box.remove();
+  const show = (kind, text) => { msg.hidden = false; msg.className = "pwmsg " + kind; msg.textContent = text; };
+  input.focus();
+  box.querySelector(".pwcancel").addEventListener("click", close);
+  box.addEventListener("click", (e) => { if (e.target === box) close(); }); // click outside the window
+  box.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  input.addEventListener("input", () => { if (!msg.classList.contains("busy")) msg.hidden = true; });
+  box.querySelector("form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const pw = input.value.trim();
+    if (!pw) { show("bad", L("Type the password first.", "请先输入密码。")); input.focus(); return; }
+    ok.disabled = input.disabled = true;
+    show("busy", L("Checking with Yupoo…", "正在向 Yupoo 验证…"));
+    try {
+      newCheck = await call("POST", "/api/store-password", { store, password: pw });
+    } catch (err) {
+      if (err.message === "no password needed") {
+        show("good", L(`✓ “${name}” doesn't need a password any more — checking it now.`, `✓ “${name}”现在不需要密码了——正在检查。`));
+        pollNewCheck();
+        setTimeout(close, 2200);
+        return;
+      }
+      ok.disabled = input.disabled = false;
+      if (err.message === "wrong password") {
+        show("bad", L("✗ Incorrect password. Check it with the supplier and try again.", "✗ 密码不对。请向供应商确认后再试。"));
+      } else {
+        show("bad", L("Couldn't check the password: ", "无法验证密码：") + err.message);
+      }
+      input.focus(); input.select();
+      return;
+    }
+    show("good", L(`✓ Correct! Password saved — checking “${name}” now.`, `✓ 密码正确！已保存——正在检查“${name}”。`));
+    renderNewItem(); renderNewHead();
+    pollNewCheck();
+    setTimeout(close, 1800);
+  });
 }
 
 // The heading on the New Additions page: what the check is doing, and the buttons.
@@ -143,30 +198,56 @@ function renderNewHead() {
   box.hidden = S.view !== "new";
   if (box.hidden) return;
   const st = newCheck || {};
-  const nStores = new Set(all().map((a) => a.store)).size;
+  const loc = LANG === "zh" ? "zh-CN" : undefined;
+  // "3:40 PM" today, or "Oct 6, 3:40 PM" on another day.
+  const at = (ms) => {
+    const d = new Date(ms), today = new Date().toDateString() === d.toDateString();
+    return d.toLocaleString(loc, today ? { hour: "numeric", minute: "2-digit" } : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  };
   let status;
-  if (st.running) {
+  if (st.checking) {
     status = L(`Checking your stores for new items… ${st.done} of ${st.stores} done${st.store ? ` (now: ${storeName(st.store)})` : ""}${st.found ? ` — ${st.found} new so far` : ""}.`,
       `正在检查店铺的新品…已完成 ${st.done}/${st.stores}${st.store ? `（正在检查：${storeName(st.store)}）` : ""}${st.found ? `——目前找到 ${st.found} 件` : ""}。`);
-  } else if (st.finished) {
-    const when = new Date(st.finished).toLocaleTimeString(LANG === "zh" ? "zh-CN" : undefined, { hour: "numeric", minute: "2-digit" });
-    status = L(`Checked ${st.done} store${st.done === 1 ? "" : "s"} at ${when} — ${st.found ? `found ${st.found} new item${st.found === 1 ? "" : "s"}` : "nothing new"}.`,
-      `${when} 检查了 ${st.done} 个店铺——${st.found ? `找到 ${st.found} 件新品` : "没有新品"}。`);
-    if (st.first) status += " " + L(`${st.first === st.done ? "This was the first check, so there was nothing to compare with yet" : `${st.first} store${st.first === 1 ? " was" : "s were"} checked for the first time`} — from now on, items added to ${st.first === 1 ? "it" : "them"} will show up here.`,
-      `${st.first === st.done ? "这是第一次检查，还没有可以比较的" : `${st.first} 个店铺是第一次检查`}——以后它们新上架的商品会显示在这里。`);
-    if (st.failed) status += " " + L("Yupoo stopped answering, so some stores weren't checked — try ⟳ Check now in a few minutes.", "Yupoo 停止响应，部分店铺没有检查——过几分钟再点“⟳ 立即检查”。");
-    else if (st.skipped) status += " " + L(`${st.skipped} store${st.skipped === 1 ? "" : "s"} couldn't be opened.`, `${st.skipped} 个店铺打不开。`);
-    if (st.locked) status += " " + L(`${st.locked} store${st.locked === 1 ? " needs a password" : "s need a password"} — enter ${st.locked === 1 ? "it" : "them"} in the 🔒 list on the left.`,
-      `${st.locked} 个店铺需要密码——请在左边的 🔒 列表里输入。`);
+  } else if (st.running && st.store) {
+    status = L(`Checking ${storeName(st.store)}…`, `正在检查 ${storeName(st.store)}…`);
   } else {
-    status = L(`Your ${nStores} stores are checked for new items a few seconds after the app opens.`, `应用打开几秒后，会检查你的 ${nStores} 个店铺有没有新品。`);
+    // What the last check found (if it ran while this page was open), then when the next one is.
+    const parts = [];
+    if (st.finished) {
+      parts.push(L(`Checked ${st.done} store${st.done === 1 ? "" : "s"} at ${at(st.finished)} — ${st.found ? `found ${st.found} new item${st.found === 1 ? "" : "s"}` : "nothing new"}.`,
+        `${at(st.finished)} 检查了 ${st.done} 个店铺——${st.found ? `找到 ${st.found} 件新品` : "没有新品"}。`));
+      if (st.first) parts.push(L(`${st.first === st.done ? "This was the first check, so there was nothing to compare with yet" : `${st.first} store${st.first === 1 ? " was" : "s were"} checked for the first time`} — from now on, items added to ${st.first === 1 ? "it" : "them"} will show up here.`,
+        `${st.first === st.done ? "这是第一次检查，还没有可以比较的" : `${st.first} 个店铺是第一次检查`}——以后它们新上架的商品会显示在这里。`));
+      if (st.skipped && !st.failed) parts.push(L(`${st.skipped} store${st.skipped === 1 ? "" : "s"} couldn't be opened.`, `${st.skipped} 个店铺打不开。`));
+      if (st.locked) parts.push(L(`${st.locked} store${st.locked === 1 ? " needs a password" : "s need a password"} — enter ${st.locked === 1 ? "it" : "them"} in the 🔒 list on the left.`,
+        `${st.locked} 个店铺需要密码——请在左边的 🔒 列表里输入。`));
+    } else if (st.lastCheck) {
+      parts.push(L(`Last checked ${at(st.lastCheck)}.`, `上次检查：${at(st.lastCheck)}。`));
+    }
+    if (st.nextCheck && !st.failed) {
+      parts.push(st.nextCheck > Date.now()
+        ? L(`Next automatic check at ${at(st.nextCheck)} (every 2 hours) — or press ⟳ Check now.`, `下次自动检查：${at(st.nextCheck)}（每 2 小时一次）——也可以点“⟳ 立即检查”。`)
+        : L("The next check starts as soon as the store being filled in is finished — or press ⟳ Check now.", "等正在补全的店铺完成后就开始检查——也可以点“⟳ 立即检查”。"));
+    }
+    if (st.failed) parts.push(L("Yupoo stopped answering, so it stopped for now — it tries again in 15 minutes (or press ⟳ Check now later).", "Yupoo 停止响应，所以先停下了——15 分钟后再试（或稍后点“⟳ 立即检查”）。"));
+    status = parts.join(" ") || L("Your stores are checked for new items every 2 hours — or press ⟳ Check now.", "每 2 小时检查一次店铺的新品——也可以点“⟳ 立即检查”。");
+  }
+  // Filling in stores that weren't completely saved (this runs first when the app opens).
+  let fill = "";
+  if (st.running && st.fillStore) {
+    fill = L(`Filling in stores you only partly saved — ${storeName(st.fillStore)}: page ${num(st.fillPage)}${st.fillPages ? ` of ${num(st.fillPages)}` : ""}, ${num(st.filled)} item${st.filled === 1 ? "" : "s"} added${st.unfinished > 1 ? ` (${st.unfinished - 1} more store${st.unfinished === 2 ? "" : "s"} after this one)` : ""}. ` +
+      `This runs in the background; if you close the app it carries on next time.`,
+      `正在补全只保存了一部分的店铺——${storeName(st.fillStore)}：第 ${num(st.fillPage)}${st.fillPages ? ` / ${num(st.fillPages)}` : ""} 页，已添加 ${num(st.filled)} 件${st.unfinished > 1 ? `（之后还有 ${st.unfinished - 1} 个店铺）` : ""}。在后台进行；关掉应用后下次会接着补。`);
+  } else if (st.filled) {
+    fill = L(`Filled in ${num(st.filled)} item${st.filled === 1 ? "" : "s"} missing from stores you'd only partly saved.`, `为只保存了一部分的店铺补全了 ${num(st.filled)} 件。`);
   }
   const n = matchingKeys.length;
   box.innerHTML = `<div class="newtitle"><h2>${t("✨ New Additions")}</h2><span class="grow"></span>
-      <button data-act="check-now" ${st.running ? "disabled" : ""} title="${t("Look through your stores for new items again")}">${t("⟳ Check now")}</button>
+      <button data-act="check-now" ${st.checking ? "disabled" : ""} title="${t("Look through your stores for new items again")}">${t("⟳ Check now")}</button>
       <button data-act="seen-all" class="primary" ${n ? "" : "disabled"} title="${t("Take these items off New Additions (they stay in your library)")}">${L(`✓ Mark ${n === inView().length ? "all" : "these"} as seen${n ? ` (${n})` : ""}`, `✓ ${n === inView().length ? "全部" : "这些"}标为已看${n ? `（${n}）` : ""}`)}</button>
       <button data-act="leave-new">${t("◀ All items")}</button></div>
-    <div class="newstatus ${st.running ? "busy" : ""}">${esc(status)}</div>
+    <div class="newstatus ${st.checking ? "busy" : ""}">${esc(status)}</div>
+    ${fill ? `<div class="newstatus ${st.running && st.fillStore ? "busy" : ""}">${esc(fill)}</div>` : ""}
     ${inView().length ? `<div class="newstatus">${L("New items stay here until you mark them as seen (✓ on a card, or the button above) — also after closing the app.",
       "新品会一直留在这里，直到你标为已看（卡片上的 ✓ 或上面的按钮）——关掉应用也不会消失。")}</div>` : ""}`;
 }
@@ -187,14 +268,17 @@ async function pollNewCheck() {
   const was = newCheck;
   newCheck = st;
   // New items came in, or the check finished (the 🔒 list may have changed): show it.
-  if (was && (st.found > (was.found || 0) || (was.running && !st.running))) await refresh();
+  // (While filling in a big store, the page is redrawn every 1,000 items rather than every page.)
+  if (was && (st.found > (was.found || 0) || (was.running && !st.running) ||
+    Math.floor((st.filled || 0) / 1000) > Math.floor((was.filled || 0) / 1000))) await refresh();
   else { renderNewItem(); renderNewHead(); }
-  if (was && was.running && !st.running && st.found) {
+  if (was && was.checking && !st.checking && st.found) {
     toast(L(`Found ${st.found} new item${st.found === 1 ? "" : "s"} in your stores.`, `在你的店铺里找到 ${st.found} 件新品。`),
       S.view === "new" ? null : "Show", S.view === "new" ? null : () => setView("new"));
   }
-  // Before it starts (a few seconds after opening) and while it runs, look again soon.
-  if (st.running || !st.started) newCheckTimer = setTimeout(pollNewCheck, st.running ? 2500 : 3000);
+  // Look again soon while it's working (or about to start); otherwise every 20 seconds, since the
+  // automatic check (every 2 hours) can start at any time while the page is open.
+  newCheckTimer = setTimeout(pollNewCheck, st.running || !st.started ? 2500 : 20000);
 }
 
 async function checkNow() {
@@ -758,14 +842,20 @@ function knownStore(u) {
   const store = u.hostname.split(".")[0].toLowerCase();
   const items = all().filter((a) => a.store.toLowerCase() === store);
   const last = items.reduce((m, a) => Math.max(m, a.firstSeen || 0), 0);
-  if (items.length) return { store, count: items.length, last, name: storeName(items[0].store) };
+  if (items.length) return { store, count: items.length, last, name: storeName(items[0].store), total: storeTotalOf(items[0].host) };
   if (openedThisSession().indexOf(store) !== -1) return { store, count: 0, last: 0, name: store };
   return null;
 }
 function knownStoreText(k) {
+  if (k.count && k.total > k.count) {
+    // Only part of the store is saved: say so, so the warning doesn't make it look complete.
+    return L(`“${k.name}” is in your library, but not all of it: ${k.count.toLocaleString()} of ${k.total.toLocaleString()} items saved. ` +
+      `The rest is being filled in each time the app opens — or open it and press Save whole store.`,
+      `图库里有“${k.name}”，但还不完整：已保存 ${num(k.count)} / ${num(k.total)} 件。每次打开应用都会在后台补全——也可以打开它点“保存整个店铺”。`);
+  }
   if (k.count) {
-    return L(`Already in your library: “${k.name}” — ${k.count.toLocaleString()} item${k.count === 1 ? "" : "s"}, last added ${fmtDate(k.last)}.`,
-      `图库里已经有这个店铺：“${k.name}”——${num(k.count)} 件，最近一次添加于 ${fmtDate(k.last)}。`);
+    return L(`Already in your library: “${k.name}” — ${k.total ? "all " : ""}${k.count.toLocaleString()} item${k.count === 1 ? "" : "s"}, last added ${fmtDate(k.last)}.`,
+      `图库里已经有这个店铺：“${k.name}”——${k.total ? "全部 " : ""}${num(k.count)} 件，最近一次添加于 ${fmtDate(k.last)}。`);
   }
   return L(`You already opened “${k.name}” earlier (nothing saved from it yet).`, `你之前已经打开过“${k.name}”（还没有保存任何商品）。`);
 }
@@ -860,6 +950,9 @@ document.addEventListener("click", (e) => {
 $("form.go").addEventListener("submit", (e) => { e.preventDefault(); openLink($(".link").value); });
 $(".link").addEventListener("input", updatePasteHint);
 $(".q").addEventListener("input", (e) => { S.q = e.target.value; S.page = 1; renderFilters(); renderGrid(); });
+// The Stores search box narrows the list as you type (Esc clears it).
+$(".storeq").addEventListener("input", renderStores);
+$(".storeq").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.target.value = ""; renderStores(); } });
 // "Move to…" search box: typing narrows the list, Enter picks the top match, Esc closes it.
 $(".mv input").addEventListener("input", renderMoveOptions);
 $(".mv input").addEventListener("keydown", (e) => {

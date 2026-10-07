@@ -115,10 +115,11 @@ func StartApp() (*App, error) {
 	_, _ = rand.Read(tok)
 	app := &App{lib: lib, crawl: NewCrawler(lib), token: hex.EncodeToString(tok)}
 	app.check = NewNewChecker(lib, app.crawl)
-	// A few seconds after opening, look through your stores for new items (see newcheck.go).
+	// A few seconds after opening: fill in stores that aren't completely saved, and check for new
+	// items every 2 hours (see newcheck.go).
 	go func() {
 		time.Sleep(8 * time.Second)
-		app.check.Start(nil)
+		app.check.Run()
 	}()
 
 	addr := "127.0.0.1:0"
