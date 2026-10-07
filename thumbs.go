@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"image/jpeg"
 	"io"
@@ -18,6 +19,27 @@ import (
 
 const thumbMax = 360
 
+const thumbMaxTries = 5
+
+// logThumbError keeps a small, capped record of why photo downloads failed (timeout, blocked,
+// connection reset…) — the same request can fail for very different reasons depending on the
+// network it runs on, and that's otherwise invisible. Kept in the main data folder, never the
+// (possibly shared) M: drive, so it reflects only this PC.
+const thumbErrLogMax = 1 << 20 // 1 MB, then it starts over
+
+func (l *Library) logThumbError(host string, err error) {
+	p := filepath.Join(l.dir, "thumb-errors.log")
+	if st, e := os.Stat(p); e == nil && st.Size() > thumbErrLogMax {
+		_ = os.Remove(p)
+	}
+	f, ferr := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if ferr != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = fmt.Fprintf(f, "%s  %s  %v\n", time.Now().Format("2006-01-02 15:04:05"), host, err)
+}
+
 // thumbWorker downloads each kit's cover once and keeps a small copy on disk.
 func (l *Library) thumbWorker() {
 	client := &http.Client{Timeout: 25 * time.Second}
@@ -28,7 +50,18 @@ func (l *Library) thumbWorker() {
 		}
 		data, err := fetchImage(client, job.cover, "https://"+job.host+"/")
 		if err != nil {
+			l.logThumbError(job.host, err)
 			time.Sleep(300 * time.Millisecond)
+			// A single failed fetch (a slow page, a hiccup, Yupoo being fussy) used to mean
+			// this cover was never tried again until the app next started. Put it back of
+			// the queue a few times instead, so a busy "save whole store" catches up on its own.
+			if job.tries < thumbMaxTries {
+				job.tries++
+				select {
+				case l.thumbs <- job:
+				default: // queue full; it will be retried next launch
+				}
+			}
 			continue
 		}
 		writeThumb(p, makeThumb(data))
@@ -65,7 +98,7 @@ func (l *Library) EnsureThumb(name string) ([]byte, error) {
 	l.mu.Lock()
 	for _, a := range l.data.Albums {
 		if a.Cover != "" && unsafeChars.ReplaceAllString(a.Key, "_") == name {
-			job = &thumbJob{a.Key, a.Host, a.Cover}
+			job = &thumbJob{key: a.Key, host: a.Host, cover: a.Cover}
 			break
 		}
 	}
@@ -80,6 +113,7 @@ func (l *Library) EnsureThumb(name string) ([]byte, error) {
 	}
 	data, err := fetchImage(onDemandClient, job.cover, "https://"+job.host+"/")
 	if err != nil {
+		l.logThumbError(job.host, err)
 		return nil, err
 	}
 	out := makeThumb(data)

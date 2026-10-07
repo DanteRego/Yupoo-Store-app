@@ -62,7 +62,12 @@ type libraryFile struct {
 	Collections []*Collection `json:"collections,omitempty"`
 }
 
-type thumbJob struct{ key, host, cover string }
+// tries counts failed attempts, so the worker can retry a job a few times
+// before giving up on it for this run (it's picked up again on the next launch).
+type thumbJob struct {
+	key, host, cover string
+	tries            int
+}
 
 type Library struct {
 	mu        sync.Mutex
@@ -154,7 +159,7 @@ func (l *Library) queueThumb(a *Album) {
 		return
 	}
 	select {
-	case l.thumbs <- thumbJob{a.Key, a.Host, a.Cover}:
+	case l.thumbs <- thumbJob{key: a.Key, host: a.Host, cover: a.Cover}:
 	default: // queue full; it will be retried next launch
 	}
 }
