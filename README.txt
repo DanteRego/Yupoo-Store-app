@@ -70,8 +70,7 @@ USING IT
     the app; they open it with 📥 Import a shared collection (on the left).
 
 WHERE YOUR DATA LIVES
-  %APPDATA%\YupooLibrary\library.json       your items
-  %APPDATA%\YupooLibrary\thumbs\            photo snapshots
+  %APPDATA%\YupooLibrary\library.json   your items
+  %APPDATA%\YupooLibrary\thumbs\        photo snapshots
   (or M:\Yupoo Library\Thumbnails when the M: drive is plugged in)
-  %APPDATA%\YupooLibrary\thumb-errors.log   recent photo download failures, for troubleshooting
 Nothing is sent anywhere; the app only talks to Yupoo.
