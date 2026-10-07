@@ -81,7 +81,7 @@ function renderStores() {
   all().forEach((a) => { counts.set(a.store, (counts.get(a.store) || 0) + 1); hosts.set(a.store, a.host); });
   let html = item("store", "", "All stores", all().length, S.store === "");
   [...counts.keys()].sort((a, b) => storeName(a).localeCompare(storeName(b))).forEach((s) => {
-    html += item("store", s, storeName(s), counts.get(s), S.store === s, "", "https://" + hosts.get(s) + "/albums", true);
+    html += item("store", s, storeName(s), counts.get(s), S.store === s, "", "https://" + hosts.get(s) + "/categories", true);
   });
   $(".stores").innerHTML = html;
 }
@@ -619,6 +619,8 @@ async function restore(file) {
 
 // Turns pasted text into a Yupoo store address (or null): adds https://, and switches
 // x.yupoo.com/photos/<store>/... to the usual <store>.x.yupoo.com/... style.
+// A store's front page or /albums goes to /categories (all categories): /albums only shows
+// part of the store, /categories shows every item.
 function yupooUrl(text) {
   let s = String(text || "").trim();
   if (!s) return null;
@@ -627,7 +629,11 @@ function yupooUrl(text) {
   try { u = new URL(s); } catch (e) { return null; }
   if (!/\.yupoo\.com$/i.test(u.hostname)) return null;
   const m = /^x\.yupoo\.com$/i.test(u.hostname) && u.pathname.match(/^\/photos\/([^/]+)(\/.*)?$/);
-  if (m) u = new URL("https://" + m[1].toLowerCase() + ".x.yupoo.com" + (m[2] || "/albums") + u.search);
+  if (m) u = new URL("https://" + m[1].toLowerCase() + ".x.yupoo.com" + (m[2] || "/") + u.search);
+  if (/\.x\.yupoo\.com$/i.test(u.hostname) && /^\/(albums\/?)?$/i.test(u.pathname)) {
+    u.pathname = "/categories";
+    u.searchParams.delete("page");
+  }
   return u;
 }
 

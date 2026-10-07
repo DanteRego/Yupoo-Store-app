@@ -63,7 +63,7 @@ func (c *Crawler) Start(pageURL, cookie string) (CrawlStatus, error) {
 		if m := rePhotosPath.FindStringSubmatch(u.Path); m != nil {
 			rest := m[2]
 			if rest == "" {
-				rest = "/albums"
+				rest = "/categories"
 			}
 			u = &url.URL{Scheme: "https", Host: strings.ToLower(m[1]) + ".x.yupoo.com", Path: rest, RawQuery: u.RawQuery}
 		}
@@ -147,9 +147,10 @@ func (c *Crawler) finish(kind, msg string, failed bool) {
 	})
 }
 
-// listURL is the page list to walk: the category or search you were on, otherwise all albums.
+// listURL is the page list to walk: the category or search you were on, otherwise the
+// all-categories page (/categories), which lists every item — /albums only shows part of the store.
 func listURL(u *url.URL) *url.URL {
-	out := &url.URL{Scheme: "https", Host: u.Host, Path: "/albums"}
+	out := &url.URL{Scheme: "https", Host: u.Host, Path: "/categories"}
 	if strings.HasPrefix(u.Path, "/categories") || strings.HasPrefix(u.Path, "/search") {
 		out.Path, out.RawQuery = u.Path, u.RawQuery
 	}

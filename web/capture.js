@@ -4,7 +4,7 @@
   // Switch to the usual <store>.x.yupoo.com/... so the green bar and saving work as normal.
   if (/^x\.yupoo\.com$/i.test(location.hostname) && window.top === window) {
     const m = location.pathname.match(/^\/photos\/([^/]+)(\/.*)?$/);
-    if (m) location.replace("https://" + m[1].toLowerCase() + ".x.yupoo.com" + (m[2] || "/albums") + location.search + location.hash);
+    if (m) location.replace("https://" + m[1].toLowerCase() + ".x.yupoo.com" + (m[2] && m[2] !== "/" && m[2] !== "/albums" ? m[2] : "/categories") + location.search + location.hash);
     return;
   }
   if (!/\.x\.yupoo\.com$/i.test(location.hostname)) return;
