@@ -4,6 +4,12 @@ How to use it: before raising the version, add a section at the TOP that starts 
 "## " and the new version number, then a few short lines. Keep each section under about 600 characters.
 If a version has no section here, the release uses your commit messages instead.
 
+## 1.0.4
+What's new in 1.0.4
+
+- ✨ New Additions: each time you open the app, it checks your stores for items they've added since last time and shows them on their own page (top of the Library sidebar), marked NEW.
+- Opening a store now goes to its all-categories page, and "Save whole store" reads that page — so it saves every item, not just part of the store.
+
 ## 1.0.3
 What's new in 1.0.3
 
