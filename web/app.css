@@ -22,7 +22,7 @@ header button, header .btn { background: rgba(255,255,255,.16); color: #fff; }
 header button:hover, header .btn:hover { background: rgba(255,255,255,.28); }
 label.toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; padding: 0 6px; }
 .body { flex: 1; display: flex; min-height: 0; }
-aside { width: 260px; flex-shrink: 0; border-right: 1px solid var(--line); background: var(--card); overflow-y: auto; padding-bottom: 20px; }
+aside { width: var(--side-w, 260px); flex-shrink: 0; border-right: 1px solid var(--line); background: var(--card); overflow-y: auto; padding-bottom: 20px; }
 aside h3 { margin: 16px 16px 8px; font-size: 12px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
 input, select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
 input:focus, select:focus { outline: 2px solid var(--green); outline-offset: -1px; }
@@ -168,3 +168,11 @@ header .iconbtn { padding: 7px 11px; font-weight: 600; }
 header .iconbtn.spin span { display: inline-block; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 label.newcol { display: block; padding: 8px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; margin-top: 6px; }
+
+/* ---------- Sidebar drag handle (drag to resize, double-click to reset) ---------- */
+.resizer { flex: 0 0 6px; margin-left: -3px; margin-right: -3px; cursor: col-resize; position: relative; z-index: 5; }
+.resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: transparent; transition: background .15s; }
+.resizer:hover::after, body.resizing .resizer::after { background: var(--green); }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing main, body.resizing aside { pointer-events: none; }
+@media (max-width: 760px) { .resizer { display: none; } }

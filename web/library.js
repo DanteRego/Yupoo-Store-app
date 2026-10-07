@@ -29,7 +29,8 @@ function teamMatches(team, q) {
 const item = (attr, val, label, n, active, extra, openUrl, renameStore) =>
   `<div class="item ${active ? "on" : ""} ${extra || ""}" role="button" tabindex="0" data-${attr}="${esc(val)}"><span class="name" title="${esc(label)}">${esc(label)}</span>` +
   (renameStore ? `<button class="ren" data-store-cat="${esc(val)}" title="What this store sells${S.storeCats[val] ? ": " + esc(S.storeCats[val]) : ""}">🏷</button>` +
-    `<button class="ren" data-rename-store="${esc(val)}" title="Rename this store">✎</button>` : "") +
+    `<button class="ren" data-rename-store="${esc(val)}" title="Rename this store">✎</button>` +
+    `<button class="ren" data-delete-store="${esc(val)}" title="Remove this store and everything saved from it">🗑</button>` : "") +
   (openUrl ? `<a class="open" href="${esc(openUrl)}" title="Open this store">open ↗</a>` : "") +
   `<span class="c">${n}</span></div>`;
 
@@ -478,6 +479,33 @@ async function removeKit(key) {
   await refresh();
 }
 
+// 🗑 next to a store: removes the store and every item saved from it (after asking).
+async function removeStore(store) {
+  const items = all().filter((a) => a.store === store);
+  const name = storeName(store);
+  const inCollections = items.filter((a) => collectionsOf(a.key).length).length;
+  const crawl = window.__kitCrawl && window.__kitCrawl.status;
+  const saving = !!(crawl && crawl.running && crawl.store === store);
+  const msg = `Remove the store “${name}” from your library?\n\n` +
+    `This deletes all ${items.length.toLocaleString()} item${items.length === 1 ? "" : "s"} saved from it, and their photos.` +
+    (inCollections ? `\n${inCollections} of them ${inCollections === 1 ? "is" : "are"} in your Catalog collections and will be taken out of them too.` : "") +
+    (saving ? `\n\n“Save whole store” is still saving this store — it will be stopped first.` : "") +
+    `\n\nThis can't be undone. (Tip: click Backup first if you might want them back.)`;
+  if (!confirm(msg)) return;
+  try {
+    if (saving) {
+      // Stop the save and wait for it to finish its current page, so nothing gets added back afterwards.
+      await window.__kitCrawl.stop();
+      for (let i = 0; i < 40 && window.__kitCrawl.status && window.__kitCrawl.status.running; i++) await new Promise((r) => setTimeout(r, 1000));
+    }
+    const res = await call("POST", "/api/remove-store", { store });
+    if (S.store === store) S.store = "";
+    S.page = 1;
+    await refresh();
+    toast(`Removed “${name}” and its ${res.removed.toLocaleString()} item${res.removed === 1 ? "" : "s"}.`);
+  } catch (e) { toast("Couldn't remove the store: " + e.message); }
+}
+
 async function renameStore(store) {
   const input = prompt(`Rename this store\n\nOriginal name: ${store}\n\nType your own name for it. Leave empty to go back to the original name.`, storeName(store));
   if (input === null) return;
@@ -559,6 +587,9 @@ function openLink(text) {
   let u;
   try { u = new URL(s); } catch (e) { u = null; }
   if (!u || !/\.yupoo\.com$/i.test(u.hostname)) { toast("That doesn't look like a Yupoo link."); return; }
+  // x.yupoo.com/photos/<store>/... is the same store as <store>.x.yupoo.com/... — use the usual style.
+  const m = /^x\.yupoo\.com$/i.test(u.hostname) && u.pathname.match(/^\/photos\/([^/]+)(\/.*)?$/);
+  if (m) u = new URL("https://" + m[1].toLowerCase() + ".x.yupoo.com" + (m[2] || "/albums") + u.search);
   location.href = u.href;
 }
 
@@ -598,6 +629,7 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.act === "catalog") openCatalog(false);
   else if (b.dataset.act === "catalog-win") openCatalog(true);
   else if (b.dataset.renameStore !== undefined) renameStore(b.dataset.renameStore);
+  else if (b.dataset.deleteStore !== undefined) removeStore(b.dataset.deleteStore);
   else if (b.dataset.storeCat !== undefined) setStoreCategory(b.dataset.storeCat);
   else if (b.dataset.catEdit) setItemCategory(b.dataset.catEdit);
   else if (b.dataset.chev !== undefined) { setCatOpen(b.dataset.chev, !openCats.has(b.dataset.chev)); update(); }

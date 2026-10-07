@@ -1,5 +1,12 @@
 // Yupoo Library app — runs on every Yupoo store page opened inside the app and saves the items it sees.
 (() => {
+  // Some links use another address style for the same store: x.yupoo.com/photos/<store>/...
+  // Switch to the usual <store>.x.yupoo.com/... so the green bar and saving work as normal.
+  if (/^x\.yupoo\.com$/i.test(location.hostname) && window.top === window) {
+    const m = location.pathname.match(/^\/photos\/([^/]+)(\/.*)?$/);
+    if (m) location.replace("https://" + m[1].toLowerCase() + ".x.yupoo.com" + (m[2] || "/albums") + location.search + location.hash);
+    return;
+  }
   if (!/\.x\.yupoo\.com$/i.test(location.hostname)) return;
   if (window.top !== window) return;
 
@@ -19,6 +26,7 @@
     };
     const albumLink = (href) => {
       const link = new URL(href, location.origin);
+      link.pathname = link.pathname.replace(/^\/photos\/[^/]+/, ""); // /photos/<store>/albums/1 -> /albums/1
       link.search = "";
       link.searchParams.set("uid", "1");
       return link.href;

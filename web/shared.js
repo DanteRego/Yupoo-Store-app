@@ -57,6 +57,51 @@ document.addEventListener("click", (e) => {
 // The 🌓 button cycles Auto (follow Windows) → Dark → Light. The choice is saved in the app's settings;
 // a copy in localStorage lets the next page show the right colours straight away.
 const THEMES = { "": "🌓 Auto", dark: "🌙 Dark", light: "☀️ Light" };
+// ---------- resizable sidebar ----------
+// Drag the thin handle on the sidebar's right edge to make it wider (e.g. to read long store names);
+// double-click it to go back to the normal width. Saved in the app's settings like the colours.
+const SIDE_MIN = 180, SIDE_MAX = 640, SIDE_NORMAL = 260;
+function applySidebarWidth(w) {
+  w = +w || 0;
+  if (w) document.documentElement.style.setProperty("--side-w", Math.max(SIDE_MIN, Math.min(SIDE_MAX, w)) + "px");
+  else document.documentElement.style.removeProperty("--side-w");
+  try { localStorage.setItem("sidebarWidth", String(w)); } catch (e) {}
+}
+async function saveSidebarWidth(w) {
+  S.settings.sidebarWidth = w;
+  applySidebarWidth(w);
+  try { await call("POST", "/api/settings", S.settings); } catch (e) {}
+}
+(() => {
+  const aside = document.querySelector(".body > aside");
+  if (!aside) return;
+  const handle = document.createElement("div");
+  handle.className = "resizer";
+  handle.title = "Drag to resize — double-click for the normal width";
+  aside.after(handle);
+  let startX = 0, startW = 0, dragging = false;
+  handle.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    dragging = true;
+    startX = e.clientX;
+    startW = aside.getBoundingClientRect().width;
+    document.body.classList.add("resizing");
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    applySidebarWidth(Math.round(Math.max(SIDE_MIN, Math.min(SIDE_MAX, startW + e.clientX - startX))));
+  });
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove("resizing");
+    saveSidebarWidth(Math.round(aside.getBoundingClientRect().width));
+  });
+  handle.addEventListener("dblclick", () => saveSidebarWidth(0));
+  try { applySidebarWidth(+localStorage.getItem("sidebarWidth") || 0); } catch (e) {}
+})();
+
 function applyTheme(theme) {
   if (theme) document.documentElement.setAttribute("data-theme", theme);
   else document.documentElement.removeAttribute("data-theme");
@@ -85,6 +130,7 @@ async function load() {
   S.myTeams = d.myTeams || {};
   S.settings = Object.assign({ autoSave: true }, d.settings || {});
   applyTheme(S.settings.theme || "");
+  applySidebarWidth(S.settings.sidebarWidth || 0);
   S.storeNames = d.storeNames || {};
   S.storeCats = d.storeCategories || {};
   // Hovering over the page title shows which version of the app this is.

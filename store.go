@@ -46,6 +46,8 @@ type Settings struct {
 	AutoSave bool `json:"autoSave"`
 	// Theme is "dark", "light", or "" (follow Windows). Set with the 🌓 button.
 	Theme string `json:"theme,omitempty"`
+	// SidebarWidth is the left sidebar's width in pixels, set by dragging its edge (0 = normal).
+	SidebarWidth int `json:"sidebarWidth,omitempty"`
 }
 
 type libraryFile struct {
@@ -232,6 +234,28 @@ func (l *Library) Remove(keys []string) {
 	}
 	l.forgetInCollections(keys)
 	l.scheduleSave()
+}
+
+// RemoveStore deletes a whole store: every item saved from it (and their photos), takes them out
+// of your collections, and forgets the store's name and 🏷 setting. Returns how many items went.
+func (l *Library) RemoveStore(store string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var keys []string
+	for k, a := range l.data.Albums {
+		if a.Store == store {
+			keys = append(keys, k)
+		}
+	}
+	for _, k := range keys {
+		delete(l.data.Albums, k)
+		_ = os.Remove(l.thumbPath(k))
+	}
+	l.forgetInCollections(keys)
+	delete(l.data.StoreNames, store)
+	delete(l.data.StoreCategories, store)
+	l.scheduleSave()
+	return len(keys)
 }
 
 func (l *Library) SetAliases(a map[string]string) {

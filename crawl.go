@@ -56,6 +56,16 @@ func (c *Crawler) Status() CrawlStatus {
 // or search page, only that category or search is saved.
 func (c *Crawler) Start(pageURL, cookie string) (CrawlStatus, error) {
 	u, err := url.Parse(pageURL)
+	// x.yupoo.com/photos/<store>/... is the same store as <store>.x.yupoo.com/...
+	if err == nil && strings.EqualFold(u.Hostname(), "x.yupoo.com") {
+		if m := rePhotosPath.FindStringSubmatch(u.Path); m != nil {
+			rest := m[2]
+			if rest == "" {
+				rest = "/albums"
+			}
+			u = &url.URL{Scheme: "https", Host: strings.ToLower(m[1]) + ".x.yupoo.com", Path: rest, RawQuery: u.RawQuery}
+		}
+	}
 	if err != nil || !strings.HasSuffix(strings.ToLower(u.Hostname()), ".x.yupoo.com") {
 		return c.Status(), errors.New("that isn't a Yupoo store page")
 	}
@@ -244,17 +254,19 @@ func fetchPage(pageURL, referer, cookie string) (string, error) {
 // ---------- reading a store page (same rules as capture.js) ----------
 
 var (
-	reAnchor   = regexp.MustCompile(`(?is)<a\b([^>]*)>(.*?)</a>`)
-	reAlbumID  = regexp.MustCompile(`/albums/(\d+)`)
-	reImg      = regexp.MustCompile(`(?is)<img\b([^>]*)>`)
-	reTitleEl  = regexp.MustCompile(`(?is)<(\w+)\b[^>]*\bclass\s*=\s*["'][^"']*title[^"']*["'][^>]*>(.*?)</(\w+)>`)
-	reNumberEl = regexp.MustCompile(`(?is)<(\w+)\b[^>]*\bclass\s*=\s*["'][^"']*number[^"']*["'][^>]*>(.*?)</(\w+)>`)
-	reTag      = regexp.MustCompile(`(?s)<[^>]*>`)
-	reSpaces   = regexp.MustCompile(`\s+`)
-	rePageLink = regexp.MustCompile(`[?&](?:amp;)?page=(\d+)`)
-	rePageIn   = regexp.MustCompile(`(?is)<input\b[^>]*\bname\s*=\s*["']page["'][^>]*>`)
-	rePageText = regexp.MustCompile(`(?i)共\s*(\d+)\s*页|of\s+(\d+)\s+pages?`)
-	attrRes    sync.Map
+	rePhotosPath   = regexp.MustCompile(`^/photos/([^/]+)(/.*)?$`)
+	rePhotosPrefix = regexp.MustCompile(`^/photos/[^/]+`)
+	reAnchor       = regexp.MustCompile(`(?is)<a\b([^>]*)>(.*?)</a>`)
+	reAlbumID      = regexp.MustCompile(`/albums/(\d+)`)
+	reImg          = regexp.MustCompile(`(?is)<img\b([^>]*)>`)
+	reTitleEl      = regexp.MustCompile(`(?is)<(\w+)\b[^>]*\bclass\s*=\s*["'][^"']*title[^"']*["'][^>]*>(.*?)</(\w+)>`)
+	reNumberEl     = regexp.MustCompile(`(?is)<(\w+)\b[^>]*\bclass\s*=\s*["'][^"']*number[^"']*["'][^>]*>(.*?)</(\w+)>`)
+	reTag          = regexp.MustCompile(`(?s)<[^>]*>`)
+	reSpaces       = regexp.MustCompile(`\s+`)
+	rePageLink     = regexp.MustCompile(`[?&](?:amp;)?page=(\d+)`)
+	rePageIn       = regexp.MustCompile(`(?is)<input\b[^>]*\bname\s*=\s*["']page["'][^>]*>`)
+	rePageText     = regexp.MustCompile(`(?i)共\s*(\d+)\s*页|of\s+(\d+)\s+pages?`)
+	attrRes        sync.Map
 )
 
 // attr reads one attribute (e.g. href) from the inside of a tag.
@@ -325,6 +337,7 @@ func extractAlbums(body, host string) []AlbumIn {
 		if u, err := url.Parse(href); err == nil {
 			r := (&url.URL{Scheme: "https", Host: host}).ResolveReference(u)
 			r.RawQuery, r.Fragment = "uid=1", ""
+			r.Path = rePhotosPrefix.ReplaceAllString(r.Path, "") // /photos/<store>/albums/1 -> /albums/1
 			link = r.String()
 		}
 		a := AlbumIn{Host: host, Store: store, ID: id[1], Title: title, Cover: absURL(cover, origin), Count: count, Link: link}

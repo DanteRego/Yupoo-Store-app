@@ -276,6 +276,13 @@ func (a *App) routes() http.Handler {
 		a.lib.SetStoreCategory(in.Store, in.Category)
 		return true, nil
 	}))
+	mux.HandleFunc("POST /api/remove-store", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in struct{ Store string }
+		if err := decode(r, &in); err != nil || in.Store == "" {
+			return nil, errors.New("which store?")
+		}
+		return map[string]int{"removed": a.lib.RemoveStore(in.Store)}, nil
+	}))
 	mux.HandleFunc("POST /api/remove", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 		var in struct{ Keys []string }
 		if err := decode(r, &in); err != nil {

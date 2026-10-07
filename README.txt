@@ -36,7 +36,8 @@ USING IT
                or "Select all matching"), then "Move to…" a category.
                Undo appears for 15 seconds afterwards.
     Stores   - narrow to one supplier; "open" jumps back into that store,
-               ✎ gives the store your own name
+               ✎ gives the store your own name, 🗑 removes the store and
+               everything saved from it (asks first)
     Filters  - the dropdowns above the items (category, brand, team, season, kit type, extras,
                store) each have a search box; Team searches English or Chinese
                ("liv" or "利物浦") and only applies to clothing
