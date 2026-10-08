@@ -199,6 +199,8 @@ function enterStorePassword(store) {
 function renderNewHead() {
   const box = $(".newhead");
   box.hidden = S.view !== "new";
+  // "◀ All items" in the header (top left, by the logo) only shows on New Additions.
+  $(".allitemsbtn").hidden = box.hidden;
   if (box.hidden) return;
   const st = newCheck || {};
   const loc = LANG === "zh" ? "zh-CN" : undefined;
@@ -248,7 +250,7 @@ function renderNewHead() {
   box.innerHTML = `<div class="newtitle"><h2>${t("✨ New Additions")}</h2><span class="grow"></span>
       <button data-act="check-now" ${st.checking ? "disabled" : ""} title="${t("Look through your stores for new items again")}">${t("⟳ Check now")}</button>
       <button data-act="seen-all" class="primary" ${n ? "" : "disabled"} title="${t("Take these items off New Additions (they stay in your library)")}">${L(`✓ Mark ${n === inView().length ? "all" : "these"} as seen${n ? ` (${n})` : ""}`, `✓ ${n === inView().length ? "全部" : "这些"}标为已看${n ? `（${n}）` : ""}`)}</button>
-      <button data-act="leave-new">${t("◀ All items")}</button></div>
+      </div>
     <div class="newstatus ${st.checking ? "busy" : ""}">${esc(status)}</div>
     ${fill ? `<div class="newstatus ${st.running && st.fillStore ? "busy" : ""}">${esc(fill)}</div>` : ""}
     ${inView().length ? `<div class="newstatus">${L("New items stay here until you mark them as seen (✓ on a card, or the button above) — also after closing the app.",

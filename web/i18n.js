@@ -44,7 +44,7 @@ const I18N_ZH = {
   "Show subcategories": "显示子分类", "Hide subcategories": "隐藏子分类",
   // ✨ New Additions
   "✨ New Additions": "✨ 新上架", "Items your stores added since you last opened the app": "上次打开应用之后店铺新上架的商品", "Items your stores have added (checked every 2 hours)": "店铺新上架的商品（每 2 小时检查一次）",
-  "⟳ Check now": "⟳ 立即检查", "Look through your stores for new items again": "再检查一次店铺的新品", "◀ All items": "◀ 全部商品",
+  "⟳ Check now": "⟳ 立即检查", "Back to all your items": "回到全部商品", "Look through your stores for new items again": "再检查一次店铺的新品", "◀ All items": "◀ 全部商品",
   "Take these items off New Additions (they stay in your library)": "把这些商品移出新上架（它们仍在图库里）", "NEW": "新",
   "Seen it — take it off New Additions (it stays in your library)": "看过了——移出新上架（仍在图库里）", "Show": "查看",
   "Enter password": "输入密码", "New password": "新密码",
