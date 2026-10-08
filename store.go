@@ -89,6 +89,9 @@ type libraryFile struct {
 	// LastNewCheck is when the new-items check last looked through every store (it runs by itself
 	// every 2 hours, also counting time the app was closed; "⟳ Check now" runs it any time).
 	LastNewCheck int64 `json:"lastNewCheck,omitempty"`
+	// ThumbsShrunkTo is the photo size (thumbMax) the saved photos were last shrunk to, so the
+	// one-time shrinking of older, bigger photos (shrinkOldThumbs in thumbs.go) isn't repeated.
+	ThumbsShrunkTo int `json:"thumbsShrunkTo,omitempty"`
 }
 
 // StoreFill is how far the start-up check got filling in a store that wasn't completely saved,
@@ -108,6 +111,7 @@ type Library struct {
 	data      libraryFile
 	version   int64
 	saveTimer *time.Timer
+	lastSave  time.Time // when library.json was last written (see saveGap)
 	thumbs    chan thumbJob
 
 	// The photos folder can change while the app runs (Settings page), so it has its own lock.
@@ -170,6 +174,7 @@ func OpenLibrary(dir, thumbDir string) (*Library, error) {
 	}
 	l.ensureMyTeamsFile()
 	go l.thumbWorker()
+	go l.shrinkOldThumbs() // once: re-saves photos from before the smaller photo size
 	// Fetch any snapshots that are still missing from earlier sessions.
 	for _, a := range l.data.Albums {
 		l.queueThumb(a)
@@ -266,26 +271,42 @@ func (l *Library) queueThumb(a *Album) {
 
 // ---------- saving ----------
 
+// How often library.json is written at most while changes keep coming in (e.g. "Save whole store"
+// or filling in a store adds a page every 2 seconds). Rewriting the whole file every page was a lot of
+// disk work for a few new items. A single change is still saved within a second, and everything is
+// saved when the app closes.
+const saveGap = 15 * time.Second
+
 func (l *Library) scheduleSave() {
 	l.version++
 	if l.saveTimer != nil {
 		l.saveTimer.Stop()
 	}
-	l.saveTimer = time.AfterFunc(800*time.Millisecond, func() { _ = l.Flush() })
+	wait := 800 * time.Millisecond
+	if since := time.Since(l.lastSave); since < saveGap && saveGap-since > wait {
+		wait = saveGap - since
+	}
+	l.saveTimer = time.AfterFunc(wait, func() { _ = l.Flush() })
 }
 
 func (l *Library) Flush() error {
+	t := time.Now()
 	l.mu.Lock()
 	b, err := json.Marshal(l.data)
+	l.lastSave = t
 	l.mu.Unlock()
 	if err != nil {
 		return err
 	}
+	locked := time.Since(t) // the library is busy (other work waits) while it's being turned into text
 	tmp := l.file() + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, l.file())
+	err = os.Rename(tmp, l.file())
+	perf.add(PerfEntry{Name: "app: save library.json", Ms: float64(time.Since(t).Microseconds()) / 1000, N: len(b), Note: "bytes"})
+	perf.add(PerfEntry{Name: "app: save library.json (library busy part)", Ms: float64(locked.Microseconds()) / 1000})
+	return err
 }
 
 func (l *Library) SaveAlbums(in []AlbumIn) (added, total int) {

@@ -113,6 +113,9 @@ function renderStores() {
 // A few seconds after the app opens, it looks through your stores for items they've added since
 // last time (newcheck.go). Those items show on the New Additions page until you mark them as seen.
 let newCheck = null, newCheckTimer = null;
+// When you last scrolled, clicked or typed, and how many filled-in items the page shows so far.
+let lastActivity = Date.now(), filledShown = 0;
+["scroll", "wheel", "pointerdown", "keydown"].forEach((ev) => document.addEventListener(ev, () => { lastActivity = Date.now(); }, { capture: true, passive: true }));
 
 // The "✨ New Additions" entry at the top of the sidebar, with how many new items there are.
 function renderNewItem() {
@@ -268,10 +271,14 @@ async function pollNewCheck() {
   const was = newCheck;
   newCheck = st;
   // New items came in, or the check finished (the 🔒 list may have changed): show it.
-  // (While filling in a big store, the page is redrawn every 1,000 items rather than every page.)
-  if (was && (st.found > (was.found || 0) || (was.running && !st.running) ||
-    Math.floor((st.filled || 0) / 1000) > Math.floor((was.filled || 0) / 1000))) await refresh();
-  else { renderNewItem(); renderNewHead(); }
+  // While filling in a big store, the filled-in items are shown every 1,000 or so — but only once you've
+  // left the page alone for 10 seconds, so the reload never interrupts scrolling or clicking.
+  if (!was) filledShown = st.filled || 0; // the page was just loaded, so it already shows them
+  const fillDue = (st.filled || 0) - filledShown >= 1000 && Date.now() - lastActivity > 10000;
+  if (was && (st.found > (was.found || 0) || (was.running && !st.running) || fillDue)) {
+    filledShown = st.filled || 0;
+    await refresh();
+  } else { renderNewItem(); renderNewHead(); }
   if (was && was.checking && !st.checking && st.found) {
     toast(L(`Found ${st.found} new item${st.found === 1 ? "" : "s"} in your stores.`, `在你的店铺里找到 ${st.found} 件新品。`),
       S.view === "new" ? null : "Show", S.view === "new" ? null : () => setView("new"));
@@ -405,18 +412,32 @@ function passes(a, skip) {
   return true;
 }
 
+// A–Z order for names: the same order as before (localeCompare), but much faster for big lists.
+const textOrder = new Intl.Collator().compare;
+// Where an item's category sits in the Library's order, worked out once per item.
+const catRankOf = (p) => (p.rank !== undefined ? p.rank : (p.rank = YO_categoryRank(p.category, p.sub)));
+// The filtered + sorted list is remembered until a filter, the search, the sort or the library itself
+// changes — so going to the next page (or ticking cards) doesn't sort 50,000 items again.
+let listMemo = { key: "", list: null };
 function filtered() {
+  const memoKey = JSON.stringify([libGen, S.view, S.q, S.sort, FILTERS.map(({ f }) => S[f])]);
+  if (listMemo.key === memoKey) return listMemo.list.slice();
+  const list = sortedList();
+  listMemo = { key: memoKey, list };
+  return list.slice();
+}
+function sortedList() {
   const list = all().filter((a) => passes(a));
   const sk = (a) => info(a).seasonKey;
   const byTeam = (a, b) => {
     const ta = info(a).team, tb = info(b).team;
     if (!ta !== !tb) return ta ? -1 : 1; // unsorted last
-    return (ta || "").localeCompare(tb || "");
+    return textOrder(ta || "", tb || "");
   };
-  const byCat = (a, b) => { const pa = info(a), pb = info(b); return YO_categoryRank(pa.category, pa.sub) - YO_categoryRank(pb.category, pb.sub); };
-  const byName = (a, b) => info(a).english.localeCompare(info(b).english);
+  const byCat = (a, b) => catRankOf(info(a)) - catRankOf(info(b));
+  const byName = (a, b) => textOrder(info(a).english, info(b).english);
   // Brand A–Z, items whose title names no brand last.
-  const byBrand = (a, b) => { const x = info(a).brand, y = info(b).brand; return !x !== !y ? (x ? -1 : 1) : (x || "").localeCompare(y || ""); };
+  const byBrand = (a, b) => { const x = info(a).brand, y = info(b).brand; return !x !== !y ? (x ? -1 : 1) : textOrder(x || "", y || ""); };
   // Clothing groups by team; everything else (shoes, bags…) by brand.
   const byTeamOrBrand = (a, b) => (info(a).clothing && info(b).clothing ? byTeam(a, b) : byBrand(a, b));
   const cmp = {
@@ -513,11 +534,13 @@ function drawGrid() {
   renderPager(S.page, pages);
   const imgs = [...document.querySelectorAll("img[data-key]")];
   imgs.forEach(loadThumb);
-  // Speed report: how long until this page's photos have arrived (or failed).
+  // Speed report: how long until the photos you can see have arrived (or failed). Photos further down
+  // only load when you scroll to them (loading="lazy"), so they aren't counted.
   const t0 = performance.now(), grid = $(".grid");
-  let left = imgs.length;
-  const one = () => { if (--left === 0 && $(".grid") === grid) PERF.add("photos for a page of cards", performance.now() - t0, imgs.length, "photos"); };
-  imgs.forEach((im) => { im.addEventListener("load", one, { once: true }); im.addEventListener("error", one, { once: true }); });
+  const seen = imgs.filter((im) => im.getBoundingClientRect().top < innerHeight);
+  let left = seen.length;
+  const one = () => { if (--left === 0 && $(".grid") === grid) PERF.add("photos you can see on a page", performance.now() - t0, seen.length, "photos"); };
+  seen.forEach((im) => { im.addEventListener("load", one, { once: true }); im.addEventListener("error", one, { once: true }); });
 }
 
 // ---------- numbered pages ----------
@@ -697,7 +720,9 @@ function renderAll() {
 }
 async function refresh() {
   const scroll = $("main").scrollTop;
+  const t = performance.now();
   await load(); renderAll();
+  PERF.add("refresh: reload library + redraw", performance.now() - t);
   $("main").scrollTop = scroll;
 }
 
@@ -965,10 +990,15 @@ document.addEventListener("click", (e) => {
 });
 $("form.go").addEventListener("submit", (e) => { e.preventDefault(); openLink($(".link").value); });
 $(".link").addEventListener("input", updatePasteHint);
+// Search: waits until you pause typing for a moment (0.18 s), so typing "nike" searches once, not four times.
+let searchTimer = null;
 $(".q").addEventListener("input", (e) => {
-  const t = performance.now();
-  S.q = e.target.value; S.page = 1; renderFilters(); renderGrid();
-  PERF.add("search: one keystroke", performance.now() - t, 0, S.q);
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    const t = performance.now();
+    S.q = e.target.value; S.page = 1; renderFilters(); renderGrid();
+    PERF.add("search: results after a pause in typing", performance.now() - t, 0, S.q);
+  }, 180);
 });
 // The Stores search box narrows the list as you type (Esc clears it).
 $(".storeq").addEventListener("input", renderStores);

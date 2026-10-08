@@ -48,3 +48,8 @@ The owner is new to programming: explain changes in plain words and keep steps s
   apply to already-saved items automatically.
 - Yupoo blocks fast scraping: keep the 1.5–2.5 s delay between pages in "Save whole store" (in `crawl.go`).
 - `web/teams.js` is also used by the old Firefox add-on; it must stay plain browser JavaScript.
+
+## Speed
+- Hidden **Speed report** at `/debug` (link at the bottom of ⚙ Settings → About): `perf.go` keeps timings in memory (`/api/perf`, `/api/debug`); pages record them with `PERF.add/time` (shared.js). "🏁 Run the speed test" opens `/#speedtest` (`speedTest()` in library.js), which clicks through a fixed set of steps, then returns to the report. Use it before/after any speed change.
+- `tools/fakelib` makes a test library.json of any size from a real one (`go run ./tools/fakelib -from <real> -n 100000 -out <dir>\library.json`), then run the app with `KIT_DATA_DIR=<dir>`.
+- What keeps it fast (don't undo): `yoTerm` remembers each name's lower-case form; the team list is one combined RegExp (`matcher.re`); `info()` results survive reloads (`cache` is only cleared when team nicknames change) and have a per-item `infoMemo` (WeakMap — never put extra fields on album objects, they go into shared files); results are kept between launches in IndexedDB (`InfoStore`, thrown away when its `fingerprint()` — the rules + nicknames — changes); `filtered()` remembers the sorted list until filters/search/sort/library change (`listMemo`, `libGen`); search waits 0.18 s after typing; library.json is written at most every 15 s while changes stream in (`saveGap` in store.go; a single change still within ~1 s; everything on exit); while a store is being filled in, the Library only reloads after 10 s without scrolling/clicking.

@@ -268,10 +268,19 @@ function yoIsAscii(s) { return /^[\x00-\x7f]+$/.test(s); }
 function yoBoundary(s, i, len) {
   return !/[a-z]/i.test(s.charAt(i - 1)) && !/[a-z]/i.test(s.charAt(i + len));
 }
+// Each name's lower-case form and "is it English letters?" are worked out once and remembered,
+// since the same few hundred names are looked for in every title (this made opening the Library slow).
+var yoTermInfo = {};
+function yoTerm(term) {
+  var x = yoTermInfo[term];
+  if (!x) x = yoTermInfo[term] = { lower: term.toLowerCase(), ascii: yoIsAscii(term) };
+  return x;
+}
+var YO_LETTER = /[a-z]/i;
 function yoFind(lowerText, term) {
-  var t = term.toLowerCase(), ascii = yoIsAscii(term), i = lowerText.indexOf(t);
+  var x = yoTerm(term), t = x.lower, i = lowerText.indexOf(t);
   while (i !== -1) {
-    if (!ascii || yoBoundary(lowerText, i, t.length)) return i;
+    if (!x.ascii || (!YO_LETTER.test(lowerText.charAt(i - 1)) && !YO_LETTER.test(lowerText.charAt(i + t.length)))) return i;
     i = lowerText.indexOf(t, i + 1);
   }
   return -1;
@@ -289,12 +298,34 @@ function YO_buildMatcher(learned) {
     YO_TEAMS[team].forEach(function (a) { list.push([a, team]); });
   });
   Object.keys(learned || {}).forEach(function (a) { list.push([a, learned[a]]); });
-  return yoSortByLength(list);
+  list = yoSortByLength(list);
+  // All the names in one search (longest first), so a title is read once instead of once per name.
+  // English names must stand alone, like in yoFind. Older browsers without this kind of search
+  // simply use the name-by-name way below.
+  try {
+    var byLower = {};
+    var parts = list.map(function (p) {
+      var x = yoTerm(p[0]);
+      if (!(x.lower in byLower)) byLower[x.lower] = p;
+      var esc = x.lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return x.ascii ? "(?<![a-z])" + esc + "(?![a-z])" : esc;
+    });
+    list.re = new RegExp(parts.join("|"), "g");
+    list.byLower = byLower;
+  } catch (e) { list.re = null; }
+  return list;
 }
 
 // Earliest match in the title wins; ties go to the longer name.
 function YO_findTeam(text, matcher) {
   var lower = String(text).toLowerCase(), best = null;
+  if (matcher.re) {
+    matcher.re.lastIndex = 0;
+    var m = matcher.re.exec(lower);
+    if (!m) return null;
+    var p = matcher.byLower[m[0]];
+    return { idx: m.index, len: p[0].length, team: p[1], alias: p[0] };
+  }
   for (var k = 0; k < matcher.length; k++) {
     var alias = matcher[k][0], i = yoFind(lower, alias);
     if (i === -1) continue;
@@ -306,12 +337,14 @@ function YO_findTeam(text, matcher) {
 }
 
 function yoTake(text, list, out, all) {
+  var lower = text.toLowerCase(); // only worked out again when the text changes
   for (var k = 0; k < list.length; k++) {
-    var lower = text.toLowerCase(), i = yoFind(lower, list[k][0]);
+    var i = yoFind(lower, list[k][0]);
     if (i === -1) continue;
     if (out.indexOf(list[k][1]) === -1) out.push(list[k][1]);
     text = text.slice(0, i) + " " + text.slice(i + list[k][0].length);
     if (!all) return text;
+    lower = text.toLowerCase();
   }
   return text;
 }

@@ -155,9 +155,11 @@ document.addEventListener("click", (e) => { if (e.target.closest('[data-act="the
 document.addEventListener("click", (e) => { if (e.target.closest('[data-act="settings"]')) location.href = "/settings"; });
 
 let version = -1;
+let libGen = 0; // goes up every time the library is (re)loaded, so remembered lists know they're out of date
 async function load() {
   const t0 = performance.now();
   const d = await call("GET", "/api/state");
+  libGen++;
   PERF.add("load: download + read library data", performance.now() - t0, Object.keys((d.library || {}).albums || {}).length, "items");
   version = d.version;
   S.lib = d.library || { albums: {} };
@@ -175,11 +177,23 @@ async function load() {
     const u = document.querySelector('[data-act="update"]'); if (u) u.title = L("You have version " + d.appVersion + " — see if a newer one is out", "你的版本是 " + d.appVersion + "——看看有没有新版本");
   }
   S.collections = d.collections || [];
-  S.locked = d.lockedStores || [];
-  S.storeTotals = d.storeTotals || {}; // how many albums each store has on Yupoo (store address -> number) // stores the ✨ New Additions check can't read without a password
-  matcher = YO_buildMatcher(allAliases());
-  cache.clear();
+  S.locked = d.lockedStores || []; // stores the ✨ New Additions check can't read without a password
+  S.storeTotals = d.storeTotals || {}; // how many albums each store has on Yupoo (store address -> number)
+  // What each item is (info) is remembered between reloads: the memory is tied to the item's title,
+  // team, category and store setting, so an item that changed is worked out again anyway. Only new
+  // team nicknames (✎ Team, my-teams.txt) can change everything, so only then start over.
+  const teamWords = JSON.stringify(allAliases());
+  // (Also start over if the memory has filled up with old versions of items, e.g. after many changes.)
+  if (teamWords !== lastTeamWords || cache.size > 2 * Object.keys(S.lib.albums).length + 1000) {
+    lastTeamWords = teamWords;
+    matcher = YO_buildMatcher(allAliases());
+    cache.clear();
+  }
+  // Pages that show items read back last time's results (see InfoStore), and save new ones later.
+  if (PERF.page === "library" || PERF.page === "catalog") await InfoStore.preload();
+  setTimeout(() => InfoStore.saveSoon(), 0);
 }
+let lastTeamWords = null;
 async function loadCollections() {
   S.collections = (await call("GET", "/api/collections")) || [];
 }
@@ -191,11 +205,17 @@ const storeName = (s) => S.storeNames[s] || s;
 
 // Everything the app knows about an item: what it is (the item sorter, categories.js) and,
 // for clothing, the team, season, kit type and extras (teams.js).
+// Each item also gets a direct shortcut to its details (infoMemo), so sorting and filtering — which ask
+// for them hundreds of thousands of times — don't have to build the long label below every time.
+// (Kept beside the item, not in it, so nothing extra ends up in exports or shared files.)
+const infoMemo = new WeakMap();
 function info(a) {
   const storeCat = S.storeCats[a.store] || "";
+  const memo = infoMemo.get(a);
+  if (memo && memo.s === storeCat) return memo.r;
   const ck = [a.key, a.title, a.team || "", a.category || "", storeCat].join("|");
   let r = cache.get(ck);
-  if (r) return r;
+  if (r) { infoMemo.set(a, { s: storeCat, r }); return r; }
   const p = YO_parse(a.title, matcher);
   const c = YO_categorize(a.title, p, a.category, storeCat);
   const clothing = YO_CLOTHING.indexOf(c.category) !== -1;
@@ -213,8 +233,85 @@ function info(a) {
   // Football kits get the "Liverpool 2024/25 Home" style name; everything else a tidied-up title.
   r.english = r.team || kit ? YO_english(r) : YO_cleanName(a.title);
   cache.set(ck, r);
+  infoMemo.set(a, { s: storeCat, r });
+  InfoStore.unsaved.push(ck);
   return r;
 }
+
+// ---------- remembering what each item is between launches ----------
+// Working out every item (team, category, brand) took most of the time when opening the Library, though
+// nearly all items are the same as last time. So the results are kept in the page's own storage
+// (IndexedDB, inside the app's browser folder) and read back next time. They're thrown away whenever
+// the sorting rules or your team nicknames change (the "fingerprint"), so they can never be out of date.
+const InfoStore = {
+  db: null, unsaved: [], loaded: false,
+  // A short code that changes whenever anything that decides an item's details changes.
+  fingerprint() {
+    const parts = [info, YO_parse, YO_categorize, YO_brand, YO_cleanName, YO_english, YO_TEAMS, YO_KIT, YO_EXTRAS,
+      YO_CATEGORY_WORDS, YO_CATEGORIES, YO_CLOTHING, YO_BRANDS, YO_BRAND_CODES, YO_NBA_TEAMS, YO_JERSEY_HINT, YO_NOT_JERSEY,
+      YO_SHOE_SIZES, YO_CLOTHING_SIZES, YO_SEASON_RE, allAliases()];
+    const text = JSON.stringify(parts, (k, v) => (typeof v === "function" || v instanceof RegExp ? String(v) : v));
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0).toString(36) + ":" + text.length;
+  },
+  open() {
+    return new Promise((res) => {
+      try {
+        const rq = indexedDB.open("yupoo-library", 1);
+        rq.onupgradeneeded = () => { rq.result.createObjectStore("info"); rq.result.createObjectStore("meta"); };
+        rq.onsuccess = () => res((this.db = rq.result));
+        rq.onerror = () => res(null);
+      } catch (e) { res(null); }
+    });
+  },
+  // Fills the memory with last time's results (if the fingerprint still matches).
+  async preload() {
+    if (this.loaded) return;
+    this.loaded = true;
+    const t = performance.now();
+    if (!(await this.open())) return;
+    const fp = this.fingerprint();
+    const db = this.db;
+    const rec = (store, fn) => new Promise((res) => {
+      try { const tx = db.transaction(store, "readonly"); const rq = fn(tx.objectStore(store)); rq.onsuccess = () => res(rq.result); rq.onerror = () => res(null); }
+      catch (e) { res(null); }
+    });
+    const saved = await rec("meta", (s) => s.get("fingerprint"));
+    if (saved !== fp) {
+      // Rules changed (or first time): start afresh.
+      try { const tx = db.transaction(["info", "meta"], "readwrite"); tx.objectStore("info").clear(); tx.objectStore("meta").put(fp, "fingerprint"); } catch (e) {}
+      PERF.add("load: remembered item details", performance.now() - t, 0, "none (rules changed or first time)");
+      return;
+    }
+    const rows = (await rec("info", (s) => s.getAll())) || [];
+    // Only items still in the library (removed stores and old versions of items are skipped).
+    let used = 0;
+    rows.forEach((row) => {
+      if (row && row.k && S.lib.albums[row.k.slice(0, row.k.indexOf("|"))] && !cache.has(row.k)) { cache.set(row.k, row.r); used++; }
+    });
+    // Mostly out of date (e.g. a big store was removed): empty the storage and save the current ones again.
+    if (rows.length > 1000 && used < rows.length * 0.7) {
+      try { db.transaction("info", "readwrite").objectStore("info").clear(); } catch (e) {}
+      this.unsaved = [...cache.keys()];
+    }
+    PERF.add("load: remembered item details", performance.now() - t, used, "items");
+  },
+  // Writes new results a while after the page has settled, a few thousand at a time so it never stutters.
+  saveSoon() {
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.saveChunk(), 3000);
+  },
+  saveChunk() {
+    if (!this.db || !this.unsaved.length) return;
+    const keys = this.unsaved.splice(0, 4000);
+    try {
+      const tx = this.db.transaction("info", "readwrite"), st = tx.objectStore("info");
+      keys.forEach((k) => { const r = cache.get(k); if (r) st.put({ k, r }, k); });
+      tx.oncomplete = () => { if (this.unsaved.length) setTimeout(() => this.saveChunk(), 200); };
+    } catch (e) { this.unsaved = []; }
+  }
+};
 
 // Photos come from the app's saved copies. If one isn't ready yet, keep retrying for a while
 // (the live Yupoo photo can't be shown here, since Yupoo blocks photos outside its own pages).

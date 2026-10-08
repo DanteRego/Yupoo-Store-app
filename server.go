@@ -21,9 +21,9 @@ import (
 var webFiles embed.FS
 
 type App struct {
-	lib     *Library
-	crawl   *Crawler
-	check   *NewChecker
+	lib   *Library
+	crawl *Crawler
+	check *NewChecker
 	// Store passwords already tried from Yupoo's cookie (RememberTypedPassword), so each is checked once.
 	pwMu    sync.Mutex
 	pwTried map[string]bool
@@ -368,6 +368,7 @@ func (a *App) routes() http.Handler {
 			"dataDir":          a.lib.dir,
 			"downloadsDir":     downloadsDir(),
 			"move":             a.lib.ThumbMoveStatus(),
+			"shrink":           a.lib.ThumbShrinkStatus(),
 			"canPickFolders":   canPickFolders,
 			"version":          AppVersion,
 		}, nil

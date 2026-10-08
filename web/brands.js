@@ -107,8 +107,8 @@ var YO_BRANDS = [
 ];
 
 function yoBrandFind(lower, alias) {
-  var a = alias.toLowerCase(), i = lower.indexOf(a);
-  var ascii = /^[\x00-\x7f]+$/.test(alias), short = a.length <= 3;
+  var x = yoTerm(alias), a = x.lower, i = lower.indexOf(a); // yoTerm (teams.js) remembers the lower-case form
+  var ascii = x.ascii, short = a.length <= 3;
   while (i !== -1) {
     if (!ascii) return true;
     var before = lower.charAt(i - 1), after = lower.charAt(i + a.length);

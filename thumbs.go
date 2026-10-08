@@ -10,13 +10,20 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	_ "image/gif"
 	_ "image/png"
 )
 
-const thumbMax = 360
+// Saved cover photos are at most thumbMax pixels on their longest side, at JPEG quality thumbQuality.
+// 280 px / 70 looks the same on a card (cards are ~200–250 px wide) and is about half the size of the
+// old 360 px / 80. Photos saved the old way are shrunk once, in the background (shrinkOldThumbs).
+const (
+	thumbMax     = 280
+	thumbQuality = 70
+)
 
 // thumbWorker downloads each kit's cover once and keeps a small copy on disk.
 func (l *Library) thumbWorker() {
@@ -168,8 +175,89 @@ func makeThumb(data []byte) []byte {
 		}
 	}
 	var out bytes.Buffer
-	if err := jpeg.Encode(&out, dst, &jpeg.Options{Quality: 80}); err != nil {
+	if err := jpeg.Encode(&out, dst, &jpeg.Options{Quality: thumbQuality}); err != nil {
 		return data
 	}
 	return out.Bytes()
+}
+
+// ---------- shrinking photos saved at the old, bigger size ----------
+
+// ThumbShrink is the progress of shrinkOldThumbs (shown on the Settings page).
+type ThumbShrink struct {
+	Running  bool  `json:"running"`
+	Done     int   `json:"done"`   // photos looked at
+	Total    int   `json:"total"`  // photos in the folder
+	Shrunk   int   `json:"shrunk"` // photos made smaller
+	Saved    int64 `json:"saved"`  // bytes saved
+	Finished bool  `json:"finished"`
+}
+
+var (
+	shrinkMu sync.Mutex
+	shrinkSt ThumbShrink
+)
+
+func (l *Library) ThumbShrinkStatus() ThumbShrink {
+	shrinkMu.Lock()
+	defer shrinkMu.Unlock()
+	return shrinkSt
+}
+
+// shrinkOldThumbs goes through the photos folder once and re-saves any photo bigger than thumbMax at
+// the new size (library.json "thumbsShrunkTo" remembers it's done). It runs slowly in the background
+// and stops if the photos folder is being moved; it carries on next time the app opens.
+func (l *Library) shrinkOldThumbs() {
+	l.mu.Lock()
+	done := l.data.ThumbsShrunkTo == thumbMax
+	l.mu.Unlock()
+	if done {
+		return
+	}
+	time.Sleep(20 * time.Second) // let the app settle first
+	dir := l.ThumbDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	shrinkMu.Lock()
+	shrinkSt = ThumbShrink{Running: true, Total: len(entries)}
+	shrinkMu.Unlock()
+	for i, e := range entries {
+		if l.ThumbMoveStatus().Running || l.ThumbDir() != dir {
+			shrinkMu.Lock()
+			shrinkSt.Running = false
+			shrinkMu.Unlock()
+			return // the photos are being moved: try again next time
+		}
+		if !e.IsDir() && !strings.HasSuffix(e.Name(), ".tmp") {
+			p := filepath.Join(dir, e.Name())
+			if f, err := os.Open(p); err == nil {
+				cfg, _, err := image.DecodeConfig(f)
+				f.Close()
+				if err == nil && max(cfg.Width, cfg.Height) > thumbMax {
+					if data, err := os.ReadFile(p); err == nil {
+						if small := makeThumb(data); len(small) < len(data) {
+							writeThumb(p, small)
+							shrinkMu.Lock()
+							shrinkSt.Shrunk++
+							shrinkSt.Saved += int64(len(data) - len(small))
+							shrinkMu.Unlock()
+						}
+					}
+					time.Sleep(5 * time.Millisecond) // gentle: the app stays smooth meanwhile
+				}
+			}
+		}
+		shrinkMu.Lock()
+		shrinkSt.Done = i + 1
+		shrinkMu.Unlock()
+	}
+	l.mu.Lock()
+	l.data.ThumbsShrunkTo = thumbMax
+	l.scheduleSave()
+	l.mu.Unlock()
+	shrinkMu.Lock()
+	shrinkSt.Running, shrinkSt.Finished = false, true
+	shrinkMu.Unlock()
 }
