@@ -313,6 +313,17 @@ func (a *App) routes() http.Handler {
 		a.lib.SetTeam(in.Key, in.Team)
 		return true, nil
 	}))
+	// The card's "✎ Edit" window: category, team, season, kit type and brand for one item at once.
+	mux.HandleFunc("POST /api/item-fixes", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in ItemFixes
+		if err := decode(r, &in); err != nil {
+			return nil, err
+		}
+		if !a.lib.SetItemFixes(in) {
+			return nil, errors.New("that item isn't in the library any more")
+		}
+		return true, nil
+	}))
 	mux.HandleFunc("POST /api/store-name", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 		var in struct{ Store, Name string }
 		if err := decode(r, &in); err != nil {

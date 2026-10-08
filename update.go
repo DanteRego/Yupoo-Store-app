@@ -14,7 +14,7 @@ import (
 
 // AppVersion is this build's version. When publishing an update, raise it here, build,
 // and make a GitHub release with the same tag (e.g. v1.0.1) — see HOW-TO-TWEAK.txt.
-const AppVersion = "2.0.2"
+const AppVersion = "2.0.3"
 
 // updateRepo is the GitHub project the app checks for new versions on start-up.
 const updateRepo = "DanteRego/Yupoo-Store-app"

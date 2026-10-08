@@ -62,7 +62,8 @@ const I18N_ZH = {
   "60 per page": "每页 60", "120 per page": "每页 120", "240 per page": "每页 240", "Items per page": "每页显示数量",
   "Previous page": "上一页", "Next page": "下一页", "Pages": "页码",
   // cards
-  "Open album ↗": "打开相册 ↗", "✎ Team": "✎ 球队", "Set the team": "设置球队", "Change what this item is": "修改这个商品的分类",
+  "Open album ↗": "打开相册 ↗", "✎ Team": "✎ 球队", "Set the team": "设置球队", "✎ Edit": "✎ 编辑",
+  "Edit this item: category, brand, team, season, kit type": "编辑这件商品：分类、品牌、球队、赛季、球衣类型", "Change what this item is": "修改这个商品的分类",
   "Remove from library": "从图库删除", "your pick": "你的选择", "your fix": "你的修改", "photos": "张图片",
   "Add to a collection (Wishlist)": "加入收藏夹（愿望清单）",
   // select bar

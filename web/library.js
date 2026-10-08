@@ -524,7 +524,7 @@ function drawGrid() {
           <a href="${esc(a.link)}">Open album ↗</a>
           ${starButton(a.key)}
           <button data-cat-edit="${esc(a.key)}" title="Change what this item is">🏷</button>
-          ${p.clothing ? `<button data-edit="${esc(a.key)}" title="Set the team">✎ Team</button>` : ""}
+          <button data-edit="${esc(a.key)}" title="Edit this item: category, brand, team, season, kit type">✎ Edit</button>
           ${a.newAt ? `<button data-seen="${esc(a.key)}" title="Seen it — take it off New Additions (it stays in your library)">✓</button>` : ""}
           <button data-remove="${esc(a.key)}" title="Remove from library">🗑</button>
         </div>
@@ -743,23 +743,106 @@ async function refreshButton(btn) {
 }
 
 // ---------- actions ----------
-async function editTeam(key) {
+// ---------- the card's "✎ Edit" window ----------
+// Change several things about one item at once: what it is (category), brand, and for clothing the team,
+// season and kit type. Each box shows what the app worked out by itself; leave a box on "Automatic" (or
+// empty) to keep that. Your choices are saved with the item and win over what the title says.
+function editItem(key) {
   const a = S.lib.albums[key]; if (!a) return;
-  const p = info(a);
-  const input = prompt(L(`Which team is this kit?\n\n${a.title}\n\nType the English team name (e.g. Liverpool). Leave empty to undo your fix.`,
-    `这件球衣是哪个球队的？\n\n${a.title}\n\n输入球队的英文名（例如 Liverpool）。留空则撤销你的修改。`), p.team || "");
-  if (input === null) return;
-  const name = input.trim();
-  const canon = name ? (YO_canonicalTeam(name, allAliases()) || name) : "";
-  const parsedTeam = YO_parse(a.title, matcher).team;
+  // What the app works out on its own, without your fixes (shown as "Automatic: …").
+  const storeCat = S.storeCats[a.store] || "";
+  const auto = YO_parse(a.title, matcher);
+  const autoCat = YO_categorize(a.title, auto, "", storeCat);
+  const autoPath = autoCat.category + (autoCat.sub ? " › " + autoCat.sub : "");
+  const autoBrand = YO_brand(a.title, autoCat.category);
+  const kits = [...new Set(YO_KIT.map((k) => k[1]))];
+  const paths = YO_categoryPaths();
+  all().forEach((x) => { const cp = info(x).catPath; if (paths.indexOf(cp) === -1) paths.push(cp); });
+  const brands = [...new Set(YO_BRANDS.map((b) => b[0]).concat(all().map((x) => info(x).brand).filter(Boolean)))].sort(textOrder);
+  const teams = [...new Set(Object.keys(YO_TEAMS).concat(Object.values(allAliases())))].sort(textOrder);
+  const autoLabel = (v) => L("Automatic", "自动") + (v ? ": " + v : L(" (not found in the title)", "（标题里没有）"));
+  const opt = (v, label, sel) => `<option value="${esc(v)}" ${sel ? "selected" : ""}>${esc(label)}</option>`;
+
+  const box = document.createElement("div");
+  box.className = "pwmodal";
+  box.innerHTML = `<form class="pwbox editbox">
+      <h3>${t("✎ Edit")}</h3>
+      <p class="hint edittitle">${esc(a.title)}</p>
+      <label class="field"><span>${t("Category")}</span>
+        <select name="category">${opt("", autoLabel(tCat(autoPath)), !a.category)}${paths.map((p) => opt(p, tCat(p), a.category === p)).join("")}</select></label>
+      <label class="field"><span>${t("Brand")}</span>
+        <input name="brand" list="edit-brands" autocomplete="off" value="${esc(a.brand || "")}" placeholder="${esc(autoLabel(autoBrand))}"></label>
+      <div class="clothingonly">
+        <label class="field"><span>${t("Team")}</span>
+          <input name="team" list="edit-teams" autocomplete="off" value="${esc(a.team || "")}" placeholder="${esc(autoLabel(auto.team))}"></label>
+        <label class="check aliasrow" hidden><input type="checkbox" name="alias"> <span class="aliastext"></span></label>
+        <div class="editrow">
+          <label class="field"><span>${t("Season")}</span>
+            <input name="season" autocomplete="off" value="${esc(a.season || "")}" placeholder="${esc(autoLabel(auto.season))}"></label>
+          <label class="field"><span>${t("Kit type")}</span>
+            <select name="kit">${opt("", autoLabel(auto.kit && t(auto.kit)), !a.kit)}${kits.map((k) => opt(k, t(k), a.kit === k)).join("")}</select></label>
+        </div>
+      </div>
+      <datalist id="edit-brands">${brands.map((b) => opt(b, b)).join("")}</datalist>
+      <datalist id="edit-teams">${teams.map((tm) => opt(tm, tm)).join("")}</datalist>
+      <div class="pwmsg" hidden></div>
+      <div class="btnrow">
+        <button type="submit" class="primary">${esc(L("Save", "保存"))}</button>
+        <button type="button" class="editreset">${esc(L("All automatic", "全部自动"))}</button>
+        <button type="button" class="pwcancel">${esc(L("Cancel", "取消"))}</button>
+      </div>
+    </form>`;
+  document.body.appendChild(box);
+  const form = box.querySelector("form"), f = form.elements;
+  const close = () => box.remove();
+  // Team, season and kit type only apply to clothing (shoes never get a team).
+  const showClothing = () => {
+    const cat = (f.category.value || autoPath).split(" › ")[0];
+    box.querySelector(".clothingonly").hidden = YO_CLOTHING.indexOf(cat) === -1;
+  };
+  // A team typed for a title the app couldn't read: offer to remember that word for every item.
   const seg = YO_guessAlias(a.title);
-  if (canon && seg && !parsedTeam && confirm(L(`Also treat "${seg}" as ${canon} for every item, in every store?`,
-    `以后在所有店铺里都把“${seg}”当作 ${canon} 吗？`))) {
-    S.aliases[seg] = canon;
-    await call("POST", "/api/aliases", S.aliases);
-  }
-  await call("POST", "/api/team", { key, team: canon });
-  await refresh();
+  const showAlias = () => {
+    const name = f.team.value.trim();
+    const canon = name ? (YO_canonicalTeam(name, allAliases()) || name) : "";
+    const row = box.querySelector(".aliasrow");
+    row.hidden = !(canon && seg && !auto.team);
+    if (!row.hidden) box.querySelector(".aliastext").textContent = L(`Also treat “${seg}” as ${canon} for every item, in every store`, `以后在所有店铺里都把“${seg}”当作 ${canon}`);
+  };
+  showClothing(); showAlias();
+  f.category.addEventListener("change", showClothing);
+  f.team.addEventListener("input", showAlias);
+  box.querySelector(".pwcancel").addEventListener("click", close);
+  box.addEventListener("click", (e) => { if (e.target === box) close(); });
+  box.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  box.querySelector(".editreset").addEventListener("click", () => {
+    f.category.value = ""; f.brand.value = ""; f.team.value = ""; f.season.value = ""; f.kit.value = "";
+    showClothing(); showAlias();
+  });
+  f.category.focus();
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const clothing = !box.querySelector(".clothingonly").hidden;
+    const teamName = clothing ? f.team.value.trim() : "";
+    const team = teamName ? (YO_canonicalTeam(teamName, allAliases()) || teamName) : "";
+    // Seasons can be typed any way ("24/25", "2425", "2024-25"): stored as 2024/25.
+    let season = clothing ? f.season.value.trim() : "";
+    if (season) season = YO_parse(season, matcher).season || season;
+    try {
+      if (team && f.alias.checked && !box.querySelector(".aliasrow").hidden) {
+        S.aliases[seg] = team;
+        await call("POST", "/api/aliases", S.aliases);
+      }
+      await call("POST", "/api/item-fixes", { key, category: f.category.value, brand: f.brand.value.trim(), team, season, kit: clothing ? f.kit.value : "" });
+    } catch (err) {
+      const m = box.querySelector(".pwmsg"); m.hidden = false; m.className = "pwmsg bad";
+      m.textContent = L("Couldn't save: ", "无法保存：") + err.message;
+      return;
+    }
+    close();
+    await refresh();
+    toast(L("Saved.", "已保存。"));
+  });
 }
 
 async function removeKit(key) {
@@ -983,7 +1066,7 @@ document.addEventListener("click", (e) => {
     FILTERS.forEach(({ f }) => { S[f] = ""; });
     S.q = ""; $(".q").value = ""; S.page = 1; update();
   }
-  else if (b.dataset.edit) editTeam(b.dataset.edit);
+  else if (b.dataset.edit) editItem(b.dataset.edit);
   else if (b.dataset.remove) removeKit(b.dataset.remove);
   else if (b.dataset.act === "refresh") refreshButton(b);
   else if (b.dataset.act === "update") checkForUpdates();

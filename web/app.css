@@ -266,3 +266,11 @@ button.primary { background: var(--green); color: #fff; font-weight: 600; }
 /* Wishlist: export progress bar under the buttons */
 .coltitle + .exportbar { margin: -4px 0 10px; }
 .coltitle button:disabled { opacity: .5; cursor: default; }
+/* Card "✎ Edit" window (uses the .pwmodal / .pwbox window styles) */
+.editbox { width: min(480px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }
+.editbox .edittitle { word-break: break-all; }
+.editbox select, .editbox input:not([type=checkbox]) { width: 100%; color: var(--ink); }
+.editrow { display: flex; gap: 10px; }
+.editrow .field { flex: 1; min-width: 0; }
+.clothingonly { display: flex; flex-direction: column; gap: 10px; }
+.clothingonly[hidden] { display: none; }

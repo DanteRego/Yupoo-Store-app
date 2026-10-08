@@ -32,6 +32,33 @@ type Album struct {
 	// NewAt is when the start-up check (newcheck.go) found this item as something its store had just
 	// added. Such items show on the Library's "✨ New Additions" page until you mark them as seen (0).
 	NewAt int64 `json:"newAt,omitempty"`
+	// Your own fixes from the card's "✎ Edit" window (empty = worked out from the title):
+	// season like "2024/25", kit type like "Home", brand like "Nike".
+	Season string `json:"season,omitempty"`
+	Kit    string `json:"kit,omitempty"`
+	Brand  string `json:"brand,omitempty"`
+}
+
+// ItemFixes is everything the "✎ Edit" window can set on one item (empty = let the app decide).
+type ItemFixes struct {
+	Key, Category, Team, Season, Kit, Brand string
+}
+
+// SetItemFixes saves the "✎ Edit" window's choices for one item.
+func (l *Library) SetItemFixes(f ItemFixes) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	a := l.data.Albums[f.Key]
+	if a == nil {
+		return false
+	}
+	a.Category = strings.TrimSpace(f.Category)
+	a.Team = strings.TrimSpace(f.Team)
+	a.Season = strings.TrimSpace(f.Season)
+	a.Kit = strings.TrimSpace(f.Kit)
+	a.Brand = strings.TrimSpace(f.Brand)
+	l.scheduleSave()
+	return true
 }
 
 // AlbumIn is what a Yupoo page sends when it sees a kit.

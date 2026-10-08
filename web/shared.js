@@ -239,7 +239,7 @@ function info(a) {
   const storeCat = S.storeCats[a.store] || "";
   const memo = infoMemo.get(a);
   if (memo && memo.s === storeCat) return memo.r;
-  const ck = [a.key, a.title, a.team || "", a.category || "", storeCat].join("|");
+  const ck = [a.key, a.title, a.team || "", a.category || "", storeCat, a.season || "", a.kit || "", a.brand || ""].join("|");
   let r = cache.get(ck);
   if (r) { infoMemo.set(a, { s: storeCat, r }); return r; }
   const p = YO_parse(a.title, matcher);
@@ -255,7 +255,11 @@ function info(a) {
   else if (c.sub === "Basketball Jersey" || c.sub === "Other Sports Jersey") Object.assign(r, { team: null, kit: null });
   else if (!kit) r.kit = null;
   if (clothing && a.team) Object.assign(r, { team: a.team, edited: true });
-  r.brand = YO_brand(a.title, c.category);
+  // Your own fixes from the card's "✎ Edit" window (season and kit type only mean something for clothing).
+  if (clothing && a.season) Object.assign(r, { season: a.season, seasonKey: parseInt(a.season, 10) || null, edited: true });
+  if (clothing && a.kit) Object.assign(r, { kit: a.kit, edited: true });
+  r.brand = a.brand || YO_brand(a.title, c.category);
+  if (a.brand) r.edited = true;
   // Football kits get the "Liverpool 2024/25 Home" style name; everything else a tidied-up title.
   r.english = r.team || kit ? YO_english(r) : YO_cleanName(a.title);
   cache.set(ck, r);

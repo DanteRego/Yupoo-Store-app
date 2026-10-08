@@ -301,7 +301,7 @@ async function exportShared() {
   await eachWithProgress(c.items, (it) => {
     const a = S.lib.albums[it.key]; if (!a) return;
     items.push({ note: it.note || "", album: { host: a.host, store: a.store, id: a.id, title: a.title, cover: a.cover, count: a.count || 0,
-      link: a.link, team: a.team || "", category: a.category || "" } });
+      link: a.link, team: a.team || "", category: a.category || "", season: a.season || "", kit: a.kit || "", brand: a.brand || "" } });
     if (S.storeNames[a.store]) storeNames[a.store] = S.storeNames[a.store];
     if (S.storeCats[a.store]) storeCategories[a.store] = S.storeCats[a.store];
   }, (done, total) => exportBar.show(80 * done / total, preparing(done, total)));

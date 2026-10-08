@@ -4,6 +4,12 @@ How to use it: before raising the version, add a section at the TOP that starts 
 "## " and the new version number, then a few short lines. Keep each section under about 600 characters.
 If a version has no section here, the release uses your commit messages instead.
 
+## 2.0.3
+What's new in 2.0.3
+
+- ✎ Edit on every card: change an item's category, brand, team, season and kit type in one window. Each box shows what the app worked out by itself; "All automatic" undoes your changes.
+- Your edits show straight away in the card's name and in the filters, and are included when you share a Wishlist.
+
 ## 2.0.2
 What's new in 2.0.2
 
