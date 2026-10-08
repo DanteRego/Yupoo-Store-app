@@ -20,6 +20,22 @@ function renderInfo() {
   $('[data-act="browse"]').textContent = d.canPickFolders ? t("Browse…") : L("Choose a folder…", "选择文件夹…");
   document.querySelectorAll('[data-act="open"]').forEach((b) => { b.hidden = !d.canPickFolders; });
   showMove(d.move);
+  showShrink(d.shrink);
+}
+
+// The one-time shrinking of photos saved at the old, bigger size (thumbs.go shrinkOldThumbs).
+let shrinkTimer = null;
+function showShrink(s) {
+  const el = $(".shrinktext");
+  if (!s || (!s.running && !s.finished)) { el.hidden = true; return; }
+  el.hidden = false;
+  const mb = (s.saved / 1048576).toFixed(0);
+  el.textContent = s.running
+    ? L(`Making photos smaller (they look the same on the cards)… ${num(s.done)} of ${num(s.total)} checked, ${mb} MB saved so far. You can keep using the app.`,
+      `正在把图片变小（在卡片上看起来一样）…已检查 ${num(s.done)} / ${num(s.total)}，已节省 ${mb} MB。你可以继续使用程序。`)
+    : L(`Photos made smaller: ${num(s.shrunk)} photos, ${mb} MB saved.`, `图片已变小：${num(s.shrunk)} 张，节省了 ${mb} MB。`);
+  clearTimeout(shrinkTimer);
+  if (s.running) shrinkTimer = setTimeout(async () => { try { info0 = await call("GET", "/api/settings-info"); renderInfo(); } catch (e) {} }, 2000);
 }
 
 async function loadInfo() {

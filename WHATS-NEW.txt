@@ -4,6 +4,16 @@ How to use it: before raising the version, add a section at the TOP that starts 
 "## " and the new version number, then a few short lines. Keep each section under about 600 characters.
 If a version has no section here, the release uses your commit messages instead.
 
+## 2.0.0
+What's new in 2.0.0
+
+- Much faster: the Library opens in about 1.6 s instead of 8, and filters, search and paging respond quicker.
+- New Additions: checks your stores every 2 hours (or ⟳ Check now) and fills in stores you only partly saved.
+- Locked stores: enter their password right in the app and see straight away if it's correct.
+- Password-locked albums are saved too; better categories (NBA jerseys, watches, glasses, belts…).
+- Store search box, Wishlist (was Catalog), Export/Backup/Restore moved to ⚙ Settings.
+- Photos take about half the space (existing ones are shrunk once, in the background).
+
 ## 1.0.4
 What's new in 1.0.4
 
