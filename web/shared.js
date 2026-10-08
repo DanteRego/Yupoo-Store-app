@@ -98,10 +98,16 @@ function applySidebarWidth(w) {
   else document.documentElement.style.removeProperty("--side-w");
   try { localStorage.setItem("sidebarWidth", String(w)); } catch (e) {}
 }
-async function saveSidebarWidth(w) {
+// Saves the width straight away, with its own small request (not the whole settings, so no page
+// can put an older width back). "keepalive" lets it finish even if you open a Yupoo page right after.
+function saveSidebarWidth(w) {
+  w = w ? Math.max(SIDE_MIN, Math.min(SIDE_MAX, Math.round(w))) : 0;
   S.settings.sidebarWidth = w;
   applySidebarWidth(w);
-  try { await call("POST", "/api/settings", S.settings); } catch (e) {}
+  try {
+    fetch("/api/sidebar-width", { method: "POST", keepalive: true,
+      headers: { "X-Kit-Token": TOKEN, "Content-Type": "application/json" }, body: JSON.stringify({ width: w }) }).catch(() => {});
+  } catch (e) {}
 }
 (() => {
   const aside = document.querySelector(".body > aside");
@@ -110,26 +116,42 @@ async function saveSidebarWidth(w) {
   handle.className = "resizer";
   handle.title = t("Drag to resize — double-click for the normal width");
   aside.after(handle);
-  let startX = 0, startW = 0, dragging = false;
-  handle.addEventListener("mousedown", (e) => {
+  // The width you're dragging to (not the drawn width, which a small window can squeeze).
+  let startX = 0, startW = 0, dragging = false, width = 0, saveTimer = null;
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    clearTimeout(saveTimer);
+    document.body.classList.remove("resizing");
+    saveSidebarWidth(width);
+  };
+  // Pointer capture: the drag keeps following the mouse and always ends properly, even if you let go
+  // outside the window.
+  handle.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
     dragging = true;
     startX = e.clientX;
-    startW = aside.getBoundingClientRect().width;
+    startW = width = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--side-w")) || aside.getBoundingClientRect().width;
+    try { handle.setPointerCapture(e.pointerId); } catch (err) {}
     document.body.classList.add("resizing");
   });
-  document.addEventListener("mousemove", (e) => {
+  handle.addEventListener("pointermove", (e) => {
     if (!dragging) return;
-    applySidebarWidth(Math.round(Math.max(SIDE_MIN, Math.min(SIDE_MAX, startW + e.clientX - startX))));
+    width = Math.round(Math.max(SIDE_MIN, Math.min(SIDE_MAX, startW + e.clientX - startX)));
+    applySidebarWidth(width);
+    // Saved while you drag too (at most every 0.4 s), not only when you let go.
+    if (!saveTimer) saveTimer = setTimeout(() => { saveTimer = null; if (dragging) saveSidebarWidth(width); }, 400);
   });
-  document.addEventListener("mouseup", () => {
-    if (!dragging) return;
-    dragging = false;
-    document.body.classList.remove("resizing");
-    saveSidebarWidth(Math.round(aside.getBoundingClientRect().width));
-  });
+  handle.addEventListener("pointerup", end);
+  handle.addEventListener("lostpointercapture", end);
   handle.addEventListener("dblclick", () => saveSidebarWidth(0));
+  // Back from a Yupoo page with the Back button, the browser may show its stored copy of this page:
+  // put the latest width on it.
+  window.addEventListener("pageshow", (e) => {
+    if (!e.persisted) return;
+    try { const saved = localStorage.getItem("sidebarWidth"); if (saved !== null) applySidebarWidth(+saved || 0); } catch (err) {}
+  });
   // The app already wrote your saved width into the page (server.go pageLook); the browser's memory is
   // only used when it has a value (it's empty after the app restarts, as the app's address changes).
   try { const saved = localStorage.getItem("sidebarWidth"); if (saved !== null) applySidebarWidth(+saved || 0); } catch (e) {}

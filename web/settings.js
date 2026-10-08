@@ -133,12 +133,41 @@ async function exportCsv() {
   } catch (e) { toast(L("Couldn't save the file: ", "无法保存文件：") + e.message); }
 }
 
+// Export Saved Data: the app writes the .zip in the background; this shows a progress bar meanwhile.
 async function backup() {
-  toast(L("Exporting your library and photos… (this can take a minute)", "正在导出图库和图片…（可能需要一分钟）"));
   try {
-    const res = await call("POST", "/api/backup");
-    toast(L(`Exported to ${res.path}`, `已导出到 ${res.path}`));
+    showExport(await call("POST", "/api/backup"));
+    pollExport();
   } catch (e) { toast(L("Export failed: ", "导出失败：") + e.message); }
+}
+
+let exportTimer = null;
+async function pollExport() {
+  clearTimeout(exportTimer);
+  let s;
+  try { s = await call("GET", "/api/backup"); } catch (e) { exportTimer = setTimeout(pollExport, 2000); return; }
+  showExport(s);
+  if (s.running) exportTimer = setTimeout(pollExport, 500);
+  else if (s.finished) {
+    toast(s.error ? L("Export failed: ", "导出失败：") + s.error : L(`Exported to ${s.path}`, `已导出到 ${s.path}`));
+    setTimeout(() => { $(".exportbar").hidden = true; }, 8000);
+  }
+}
+
+function showExport(s) {
+  const box = $(".exportbar"), btn = $('[data-act="backup"]');
+  btn.disabled = !!s.running;
+  if (!s.running && !s.finished) { box.hidden = true; return; }
+  box.hidden = false;
+  const pct = s.total ? Math.round((s.done / s.total) * 100) : 0;
+  $(".exportbar .fill").style.width = (s.running ? pct : 100) + "%";
+  $(".exportbar .fill").classList.toggle("unknown", s.running && !s.total);
+  $(".exporttext").textContent = s.running
+    ? (s.total
+      ? L(`Exporting… ${num(s.done)} of ${num(s.total)} files (${pct}%). You can keep using the app.`, `正在导出… ${num(s.done)} / ${num(s.total)} 个文件（${pct}%）。你可以继续使用程序。`)
+      : L("Getting ready to export…", "正在准备导出…"))
+    : s.error ? L("Export failed: ", "导出失败：") + s.error
+    : L(`Done — saved to ${s.path}`, `完成——已保存到 ${s.path}`);
 }
 
 async function restore(file) {
@@ -221,4 +250,6 @@ load().then(async () => {
   if (radio) radio.checked = true;
   await loadInfo();
   if (info0.move && info0.move.running) pollMove();
+  // An export still running (e.g. you left this page and came back): keep showing its progress.
+  try { const ex = await call("GET", "/api/backup"); if (ex.running) { showExport(ex); pollExport(); } } catch (e) {}
 }).catch((e) => toast(L("Couldn't load the settings: ", "无法加载设置：") + e.message));

@@ -170,7 +170,7 @@ header .iconbtn.spin span { display: inline-block; animation: spin .8s linear in
 label.newcol { display: block; padding: 8px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; margin-top: 6px; }
 
 /* ---------- Sidebar drag handle (drag to resize, double-click to reset) ---------- */
-.resizer { flex: 0 0 6px; margin-left: -3px; margin-right: -3px; cursor: col-resize; position: relative; z-index: 5; }
+.resizer { flex: 0 0 6px; margin-left: -3px; margin-right: -3px; cursor: col-resize; position: relative; z-index: 5; touch-action: none; }
 .resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: transparent; transition: background .15s; }
 .resizer:hover::after, body.resizing .resizer::after { background: var(--green); }
 body.resizing { cursor: col-resize; user-select: none; }
@@ -263,3 +263,6 @@ button.primary { background: var(--green); color: #fff; font-weight: 600; }
 .ptable td:nth-child(n+2) { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .slowest ol { margin: 0; padding-left: 20px; line-height: 1.8; }
 .speedlink { align-self: center; font-size: 12px; color: var(--muted); }
+/* Wishlist: export progress bar under the buttons */
+.coltitle + .exportbar { margin: -4px 0 10px; }
+.coltitle button:disabled { opacity: .5; cursor: default; }

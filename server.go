@@ -454,6 +454,16 @@ func (a *App) routes() http.Handler {
 		a.lib.SetAliases(in)
 		return true, nil
 	}))
+	// The sidebar width, saved while you drag its edge (shared.js) — its own small request, so it's
+	// saved straight away and finishes even if you open a Yupoo page right after.
+	mux.HandleFunc("POST /api/sidebar-width", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in struct{ Width int }
+		if err := decode(r, &in); err != nil {
+			return nil, err
+		}
+		a.lib.SetSidebarWidth(in.Width)
+		return true, nil
+	}))
 	mux.HandleFunc("POST /api/settings", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 		var in Settings
 		if err := decode(r, &in); err != nil {
@@ -474,19 +484,12 @@ func (a *App) routes() http.Handler {
 		}
 		return map[string]string{"path": p}, nil
 	}))
+	// "Export Saved Data": starts the .zip in the background (export.go); GET reports its progress.
 	mux.HandleFunc("POST /api/backup", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
-		p := uniquePath(downloadsDir(), "yupoo-library-"+todayStamp()+".zip")
-		f, err := os.Create(p)
-		if err != nil {
-			return nil, err
-		}
-		err = a.lib.WriteBackup(f)
-		f.Close()
-		if err != nil {
-			_ = os.Remove(p)
-			return nil, err
-		}
-		return map[string]string{"path": p}, nil
+		return export.start(a.lib), nil
+	}))
+	mux.HandleFunc("GET /api/backup", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		return export.status(), nil
 	}))
 	mux.HandleFunc("POST /api/restore", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 		b, err := io.ReadAll(io.LimitReader(r.Body, 2<<30))

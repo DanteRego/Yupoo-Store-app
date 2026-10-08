@@ -466,8 +466,24 @@ func (l *Library) SetSettings(s Settings) {
 	defer l.mu.Unlock()
 	s.ThumbsDir = l.data.Settings.ThumbsDir
 	s.UpdatedTo = l.data.Settings.UpdatedTo
+	// The sidebar width only changes through SetSidebarWidth (dragging the edge), so a page saving
+	// its other settings with an older copy (e.g. the Wishlist in its own window) can't shrink it back.
+	s.SidebarWidth = l.data.Settings.SidebarWidth
 	l.data.Settings = s
 	l.scheduleSave()
+}
+
+// SetSidebarWidth saves the sidebar width you dragged (0 = the normal width).
+func (l *Library) SetSidebarWidth(w int) {
+	if w != 0 {
+		w = min(640, max(180, w)) // same limits as shared.js
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.data.Settings.SidebarWidth != w {
+		l.data.Settings.SidebarWidth = w
+		l.scheduleSave()
+	}
 }
 
 func (l *Library) GetSettings() Settings {
@@ -496,34 +512,49 @@ func (l *Library) StateJSON() ([]byte, error) {
 
 // ---------- backup / restore ----------
 
-func (l *Library) WriteBackup(w io.Writer) error {
+// WriteBackup writes the library and photos as a .zip ("Export Saved Data"). progress (may be nil) is
+// told how many files are done out of how many, for the progress bar on the Settings page.
+func (l *Library) WriteBackup(w io.Writer, progress func(done, total int)) error {
 	if err := l.Flush(); err != nil {
 		return err
 	}
+	thumbDir := l.ThumbDir()
+	entries, _ := os.ReadDir(thumbDir)
+	var photos []string
+	for _, e := range entries {
+		if !e.IsDir() && !strings.HasSuffix(e.Name(), ".tmp") {
+			photos = append(photos, e.Name())
+		}
+	}
+	total := len(photos) + 1
 	zw := zip.NewWriter(w)
-	add := func(name, path string) error {
+	// Photos are already compressed (JPEG), so they're stored as they are — squeezing them again
+	// made the export much slower for almost no saving. library.json is compressed as usual.
+	add := func(name, path string, method uint16) error {
 		b, err := os.ReadFile(path)
 		if err != nil {
 			return nil
 		}
-		f, err := zw.Create(name)
+		f, err := zw.CreateHeader(&zip.FileHeader{Name: name, Method: method, Modified: time.Now()})
 		if err != nil {
 			return err
 		}
 		_, err = f.Write(b)
 		return err
 	}
-	if err := add("library.json", l.file()); err != nil {
+	if err := add("library.json", l.file(), zip.Deflate); err != nil {
 		return err
 	}
-	thumbDir := l.ThumbDir()
-	entries, _ := os.ReadDir(thumbDir)
-	for _, e := range entries {
-		if !e.IsDir() && !strings.HasSuffix(e.Name(), ".tmp") {
-			if err := add("thumbs/"+e.Name(), filepath.Join(thumbDir, e.Name())); err != nil {
-				return err
-			}
+	for i, name := range photos {
+		if err := add("thumbs/"+name, filepath.Join(thumbDir, name), zip.Store); err != nil {
+			return err
 		}
+		if progress != nil && (i%200 == 0 || i == len(photos)-1) {
+			progress(i+2, total)
+		}
+	}
+	if progress != nil {
+		progress(total, total)
 	}
 	return zw.Close()
 }

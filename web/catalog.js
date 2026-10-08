@@ -237,21 +237,57 @@ async function saveNote(input) {
   } catch (e) { toast(L("Couldn't save the note: ", "无法保存备注：") + e.message); }
 }
 
+// ---------- the export progress bar (under the buttons) ----------
+// Both exports go through two steps — getting each item ready (0–80%), then saving the file (80–100%) —
+// and the bar shows how far along they are. The export buttons are greyed out meanwhile.
+const exportBar = {
+  timer: null,
+  show(pct, text) {
+    clearTimeout(this.timer);
+    $(".exportbar").hidden = false;
+    $(".exportbar .fill").style.width = Math.round(pct) + "%";
+    $(".exporttext").textContent = text;
+    document.querySelectorAll('[data-act="csv"], [data-act="share"]').forEach((b) => { b.disabled = true; });
+  },
+  end(text) {
+    this.show(100, text);
+    document.querySelectorAll('[data-act="csv"], [data-act="share"]').forEach((b) => { b.disabled = false; });
+    this.timer = setTimeout(() => { $(".exportbar").hidden = true; }, 6000);
+  }
+};
+// Goes through a list a few hundred at a time, letting the bar update in between.
+async function eachWithProgress(list, fn, onProgress) {
+  for (let i = 0; i < list.length; i += 300) {
+    list.slice(i, i + 300).forEach(fn);
+    onProgress(Math.min(i + 300, list.length), list.length);
+    await new Promise((r) => setTimeout(r, 0));
+  }
+}
+const preparing = (done, total) => L(`Getting items ready… ${num(done)} of ${num(total)}`, `正在准备商品… ${num(done)} / ${num(total)}`);
+const savingFile = () => L("Saving the file…", "正在保存文件…");
+
 async function exportCsv() {
   const c = current();
   const rows = [["Name", "Category", "Subcategory", "Brand", "Team", "Season", "Kit type", "Store", c ? "Note" : "Collections", "Album link", "Original title", "Added"]];
-  filteredEntries().forEach((e) => {
+  const entries = filteredEntries();
+  exportBar.show(0, preparing(0, entries.length));
+  await eachWithProgress(entries, (e) => {
     const a = S.lib.albums[e.key]; if (!a) return;
     const p = info(a);
     rows.push([p.english, p.category, p.sub, p.brand, p.team || "", p.season || "", p.kit || "", storeName(a.store),
       c ? e.note : e.cols.map((x) => x.name).join(", "), a.link, a.title, fmtDate(e.added)]);
-  });
+  }, (done, total) => exportBar.show(80 * done / total, preparing(done, total)));
   const content = "﻿" + rows.map((r) => r.map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(",")).join("\r\n");
   const fileName = (c ? c.name : "catalog").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "collection";
+  exportBar.show(85, savingFile());
   try {
     const res = await call("POST", "/api/save-file", { name: `${fileName}-${today()}.csv`, content });
+    exportBar.end(L(`Done — ${plural(rows.length - 1, "item")} saved to ${res.path}`, `完成——已把 ${rows.length - 1} 件保存到 ${res.path}`));
     toast(L(`Saved ${plural(rows.length - 1, "item")} to ${res.path}`, `已把 ${rows.length - 1} 件保存到 ${res.path}`));
-  } catch (e) { toast(L("Couldn't save the CSV: ", "无法保存 CSV：") + e.message); }
+  } catch (e) {
+    exportBar.end(L("Couldn't save the CSV: ", "无法保存 CSV：") + e.message);
+    toast(L("Couldn't save the CSV: ", "无法保存 CSV：") + e.message);
+  }
 }
 
 // ---------- sharing a collection as a file ----------
@@ -260,21 +296,27 @@ async function exportCsv() {
 async function exportShared() {
   const c = current(); if (!c) return;
   const items = [], storeNames = {}, storeCategories = {};
-  c.items.forEach((it) => {
+  if (!c.items.some((it) => S.lib.albums[it.key])) { toast(L("There's nothing in this collection to share yet.", "这个收藏夹里还没有可分享的东西。")); return; }
+  exportBar.show(0, preparing(0, c.items.length));
+  await eachWithProgress(c.items, (it) => {
     const a = S.lib.albums[it.key]; if (!a) return;
     items.push({ note: it.note || "", album: { host: a.host, store: a.store, id: a.id, title: a.title, cover: a.cover, count: a.count || 0,
       link: a.link, team: a.team || "", category: a.category || "" } });
     if (S.storeNames[a.store]) storeNames[a.store] = S.storeNames[a.store];
     if (S.storeCats[a.store]) storeCategories[a.store] = S.storeCats[a.store];
-  });
-  if (!items.length) { toast(L("There's nothing in this collection to share yet.", "这个收藏夹里还没有可分享的东西。")); return; }
+  }, (done, total) => exportBar.show(80 * done / total, preparing(done, total)));
   const file = { type: "yupoo-library-collection", version: 1, name: c.name, exported: Date.now(), storeNames, storeCategories, items };
   const fileName = c.name.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "collection";
+  exportBar.show(85, savingFile());
   try {
     const res = await call("POST", "/api/save-file", { name: `${fileName}.yupoo-collection.json`, content: JSON.stringify(file, null, 1) });
+    exportBar.end(L(`Done — “${c.name}” (${plural(items.length, "item")}) saved to ${res.path}`, `完成——已把“${c.name}”（${items.length} 件）保存到 ${res.path}`));
     toast(L(`Saved “${c.name}” (${plural(items.length, "item")}) to ${res.path}. Send that file to anyone with Yupoo Library — they open it with 📥 Import.`,
       `已把“${c.name}”（${items.length} 件）保存到 ${res.path}。把这个文件发给也在用 Yupoo 图库的人——他们用 📥 导入 打开。`));
-  } catch (e) { toast(L("Couldn't save the file: ", "无法保存文件：") + e.message); }
+  } catch (e) {
+    exportBar.end(L("Couldn't save the file: ", "无法保存文件：") + e.message);
+    toast(L("Couldn't save the file: ", "无法保存文件：") + e.message);
+  }
 }
 
 async function importShared(file) {

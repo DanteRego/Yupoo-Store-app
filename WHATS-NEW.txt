@@ -4,6 +4,12 @@ How to use it: before raising the version, add a section at the TOP that starts 
 "## " and the new version number, then a few short lines. Keep each section under about 600 characters.
 If a version has no section here, the release uses your commit messages instead.
 
+## 2.0.2
+What's new in 2.0.2
+
+- Progress bars: "Export Saved Data" (⚙ Settings) and the Wishlist's "Export CSV" / "📤 Export to share" now show how far along they are. Exporting your whole library is also faster.
+- The sidebar width is saved while you drag it and can't be shrunk back by another screen — it stays the size you made it, also after visiting a Yupoo page.
+
 ## 2.0.1
 What's new in 2.0.1
 
