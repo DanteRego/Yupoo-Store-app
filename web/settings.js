@@ -117,8 +117,8 @@ async function pollMove() {
   } catch (e) { moveTimer = setTimeout(pollMove, 2000); }
 }
 
-// ---------- your saved data: Export Saved Data, Backup, Restore ----------
-// Export Saved Data: a spreadsheet (CSV) of every item in the library, saved to Downloads.
+// ---------- your saved data: Export Saved Data (.zip), Backup (.csv), Import (.zip) ----------
+// Backup: a spreadsheet (CSV) of every item in the library, saved to Downloads.
 async function exportCsv() {
   const rows = [["Name", "Category", "Subcategory", "Brand", "Team", "Season", "Kit type", "Extras", "Store", "Original title", "Photos", "Album link", "Saved"]];
   all().sort((a, b) => (b.firstSeen || 0) - (a.firstSeen || 0)).forEach((a) => {
@@ -129,24 +129,24 @@ async function exportCsv() {
   const content = "﻿" + rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\r\n");
   try {
     const res = await call("POST", "/api/save-file", { name: `yupoo-library-${today()}.csv`, content });
-    toast(L(`Saved ${rows.length - 1} items to ${res.path}`, `已把 ${num(rows.length - 1)} 件保存到 ${res.path}`));
+    toast(L(`Backup saved: ${rows.length - 1} items in a spreadsheet at ${res.path}`, `备份已保存：${num(rows.length - 1)} 件商品的表格，在 ${res.path}`));
   } catch (e) { toast(L("Couldn't save the file: ", "无法保存文件：") + e.message); }
 }
 
 async function backup() {
-  toast(L("Making a backup…", "正在备份…"));
+  toast(L("Exporting your library and photos… (this can take a minute)", "正在导出图库和图片…（可能需要一分钟）"));
   try {
     const res = await call("POST", "/api/backup");
-    toast(L(`Backup saved to ${res.path}`, `备份已保存到 ${res.path}`));
-  } catch (e) { toast(L("Backup failed: ", "备份失败：") + e.message); }
+    toast(L(`Exported to ${res.path}`, `已导出到 ${res.path}`));
+  } catch (e) { toast(L("Export failed: ", "导出失败：") + e.message); }
 }
 
 async function restore(file) {
   try {
     const res = await call("POST", "/api/restore", await file.arrayBuffer(), true);
     await load();
-    toast(L(`Restore finished — ${res.added} items added.`, `恢复完成——新增 ${num(res.added)} 件。`));
-  } catch (e) { toast(L("That file isn't a Yupoo Library backup (.zip).", "这个文件不是 Yupoo 图库的备份（.zip）。")); }
+    toast(L(`Import finished — ${res.added} items added.`, `导入完成——新增 ${num(res.added)} 件。`));
+  } catch (e) { toast(L("That file isn't a Yupoo Library export (.zip).", "这个文件不是 Yupoo 图库导出的文件（.zip）。")); }
 }
 
 // ---------- 🩺 check-up ----------

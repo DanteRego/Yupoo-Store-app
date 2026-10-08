@@ -5,7 +5,8 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtDate = (ms) => ms ? new Date(ms).toLocaleDateString(typeof LANG !== "undefined" && LANG === "zh" ? "zh-CN" : undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
-const today = () => new Date().toISOString().slice(0, 10);
+// Today's date in your own time zone (toISOString would give the UTC date, a day off in the evening).
+const today = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 // "3 items" / "3 件" — the most common count in messages.
 const nItems = (n) => L(plural(n, "item"), `${n} 件`);
@@ -129,7 +130,9 @@ async function saveSidebarWidth(w) {
     saveSidebarWidth(Math.round(aside.getBoundingClientRect().width));
   });
   handle.addEventListener("dblclick", () => saveSidebarWidth(0));
-  try { applySidebarWidth(+localStorage.getItem("sidebarWidth") || 0); } catch (e) {}
+  // The app already wrote your saved width into the page (server.go pageLook); the browser's memory is
+  // only used when it has a value (it's empty after the app restarts, as the app's address changes).
+  try { const saved = localStorage.getItem("sidebarWidth"); if (saved !== null) applySidebarWidth(+saved || 0); } catch (e) {}
 })();
 
 function applyTheme(theme) {
@@ -149,7 +152,8 @@ async function cycleTheme() {
   applyTheme(next);
   try { await call("POST", "/api/settings", S.settings); } catch (e) { toast(L("Couldn't save the colour setting: ", "无法保存颜色设置：") + e.message); }
 }
-applyTheme((() => { try { return localStorage.getItem("theme") || ""; } catch (e) { return ""; } })());
+// Same for light/dark: the page already has your choice (data-theme from the app); the browser's memory only if set.
+applyTheme((() => { try { const s = localStorage.getItem("theme"); return s !== null ? s : (document.documentElement.getAttribute("data-theme") || ""); } catch (e) { return document.documentElement.getAttribute("data-theme") || ""; } })());
 document.addEventListener("click", (e) => { if (e.target.closest('[data-act="theme"]')) cycleTheme(); });
 // ⚙ Settings (in the Library and Catalog headers).
 document.addEventListener("click", (e) => { if (e.target.closest('[data-act="settings"]')) location.href = "/settings"; });

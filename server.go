@@ -105,6 +105,22 @@ func uniquePath(dir, name string) string {
 	}
 }
 
+// pageLook is written into every page as it's sent: your sidebar width and light/dark choice, so each
+// screen is drawn that way from the very first moment. (The pages also remember them in the browser,
+// but the app gets a new local address each time it starts, which empties that memory, so pages
+// used to show the normal width / colours until the library had loaded.)
+func (a *App) pageLook() string {
+	s := a.lib.GetSettings()
+	out := ""
+	if w := s.SidebarWidth; w > 0 {
+		out += fmt.Sprintf(` style="--side-w:%dpx"`, min(640, max(180, w))) // same limits as shared.js
+	}
+	if s.Theme == "dark" || s.Theme == "light" {
+		out += ` data-theme="` + s.Theme + `"`
+	}
+	return out
+}
+
 // StartApp opens the library and serves the library page on a private local address.
 func StartApp() (*App, error) {
 	lib, err := OpenLibrary(dataDir(), thumbsDir())
@@ -149,7 +165,8 @@ func (a *App) routes() http.Handler {
 				if lang != "zh" {
 					lang = "en"
 				}
-				b = []byte(strings.NewReplacer("{{TOKEN}}", a.token, "{{LANG}}", lang).Replace(string(b)))
+				b = []byte(strings.NewReplacer("{{TOKEN}}", a.token, "{{LANG}}", lang,
+					`<html lang="en">`, `<html lang="en"`+a.pageLook()+`>`).Replace(string(b)))
 			}
 			w.Header().Set("Content-Type", ctype)
 			w.Header().Set("Cache-Control", "no-store")
@@ -458,7 +475,7 @@ func (a *App) routes() http.Handler {
 		return map[string]string{"path": p}, nil
 	}))
 	mux.HandleFunc("POST /api/backup", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
-		p := uniquePath(downloadsDir(), "yupoo-library-backup-"+todayStamp()+".zip")
+		p := uniquePath(downloadsDir(), "yupoo-library-"+todayStamp()+".zip")
 		f, err := os.Create(p)
 		if err != nil {
 			return nil, err

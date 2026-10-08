@@ -27,7 +27,9 @@ function num(n) { return Number(n || 0).toLocaleString(LANG === "zh" ? "zh-CN" :
 const I18N_ZH = {
   // header & general
   "Yupoo Library": "Yupoo 图库", "Refresh": "刷新", "Open": "打开", "📒 Wishlist": "📒 愿望清单", "⧉": "⧉",
-  "Auto-save while browsing": "浏览时自动保存", "Export CSV": "导出 CSV", "Backup": "备份", "Restore": "恢复", "Export Saved Data": "导出保存的数据", "Your saved data": "你保存的数据",
+  "Auto-save while browsing": "浏览时自动保存", "Export CSV": "导出 CSV", "Backup": "备份", "Restore": "恢复", "Export Saved Data": "导出保存的数据", "Your saved data": "你保存的数据", "Import": "导入",
+  "Save your whole library and photos as a .zip file": "把整个图库和图片存成一个 .zip 文件", "Save a spreadsheet (CSV) of every item": "把每件商品存成一个表格（CSV）",
+  "Add the items from an exported .zip file": "把导出的 .zip 文件里的商品加回来",
   "⬆ Check for updates": "⬆ 检查更新", "⚙ Settings": "⚙ 设置", "◀ Library": "◀ 图库", "⧉ New window": "⧉ 新窗口",
   "🌓 Auto": "🌓 自动", "🌙 Dark": "🌙 深色", "☀️ Light": "☀️ 浅色",
   "Paste a Yupoo link, e.g. shida-tiyu888.x.yupoo.com/albums": "粘贴 Yupoo 链接，例如 shida-tiyu888.x.yupoo.com/albums",

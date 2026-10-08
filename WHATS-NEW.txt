@@ -4,6 +4,13 @@ How to use it: before raising the version, add a section at the TOP that starts 
 "## " and the new version number, then a few short lines. Keep each section under about 600 characters.
 If a version has no section here, the release uses your commit messages instead.
 
+## 2.0.1
+What's new in 2.0.1
+
+- The sidebar keeps the width you dragged it to on every screen, also right after the app opens (no more snapping back). Light/dark mode no longer flashes.
+- ⚙ Settings → Your saved data: "Export Saved Data" now saves your whole library and photos as a .zip, "Backup" saves a spreadsheet (CSV), and "Restore" is now called "Import".
+- Fix: exported files are dated with your own local date.
+
 ## 2.0.0
 What's new in 2.0.0
 
