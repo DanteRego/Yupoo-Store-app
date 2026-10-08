@@ -429,8 +429,10 @@ function filtered() {
   return list.sort(cmp);
 }
 
-function renderGrid() {
-  const list = filtered(), total = all().length;
+// Draws the cards (timed for the Speed report).
+function renderGrid() { PERF.time("draw a page of cards (incl. filter + sort)", drawGrid, () => shownKeys.length, "cards"); }
+function drawGrid() {
+  const list = PERF.time("filter + sort items", filtered, (l) => l.length, "items"), total = all().length;
   // Numbered pages: keep the page number inside the range (e.g. after a filter shrinks the list).
   const pages = Math.max(1, Math.ceil(list.length / S.perPage));
   S.page = Math.min(Math.max(1, S.page), pages);
@@ -509,7 +511,13 @@ function renderGrid() {
     </div>`;
   }).join("");
   renderPager(S.page, pages);
-  document.querySelectorAll("img[data-key]").forEach(loadThumb);
+  const imgs = [...document.querySelectorAll("img[data-key]")];
+  imgs.forEach(loadThumb);
+  // Speed report: how long until this page's photos have arrived (or failed).
+  const t0 = performance.now(), grid = $(".grid");
+  let left = imgs.length;
+  const one = () => { if (--left === 0 && $(".grid") === grid) PERF.add("photos for a page of cards", performance.now() - t0, imgs.length, "photos"); };
+  imgs.forEach((im) => { im.addEventListener("load", one, { once: true }); im.addEventListener("error", one, { once: true }); });
 }
 
 // ---------- numbered pages ----------
@@ -674,7 +682,15 @@ async function removeSelected() {
   toast(L(`Removed ${keys.length} items.`, `已删除 ${keys.length} 件。`));
 }
 
-function update() { renderNewItem(); renderCats(); renderStores(); renderFilters(); renderGrid(); }
+function update() {
+  const t = performance.now();
+  renderNewItem();
+  PERF.time("sidebar: categories", renderCats);
+  PERF.time("sidebar: stores", renderStores);
+  PERF.time("filter buttons", renderFilters);
+  renderGrid();
+  PERF.add("apply a filter (redraw sidebar + filters + cards)", performance.now() - t);
+}
 function renderAll() {
   update();
   $(".autosave").checked = S.settings.autoSave;
@@ -949,7 +965,11 @@ document.addEventListener("click", (e) => {
 });
 $("form.go").addEventListener("submit", (e) => { e.preventDefault(); openLink($(".link").value); });
 $(".link").addEventListener("input", updatePasteHint);
-$(".q").addEventListener("input", (e) => { S.q = e.target.value; S.page = 1; renderFilters(); renderGrid(); });
+$(".q").addEventListener("input", (e) => {
+  const t = performance.now();
+  S.q = e.target.value; S.page = 1; renderFilters(); renderGrid();
+  PERF.add("search: one keystroke", performance.now() - t, 0, S.q);
+});
 // The Stores search box narrows the list as you type (Esc clears it).
 $(".storeq").addEventListener("input", renderStores);
 $(".storeq").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.target.value = ""; renderStores(); } });
@@ -1010,12 +1030,46 @@ if (channel) channel.onmessage = async (e) => {
   else if (what === "library") await refresh();
 };
 
+// ---------- speed test (Speed report → "Run the speed test", opens /#speedtest) ----------
+// Does the same few things every time — a category, a store, typing a search word, the next page,
+// refreshing — so the numbers can be compared before and after a change. Then back to the report.
+async function speedTest() {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const painted = () => new Promise((r) => PERF.afterPaint(r));
+  const step = async (name, fn) => { const t = performance.now(); await fn(); await painted(); PERF.add("speed test: " + name, performance.now() - t); await wait(400); };
+  toast(L("Running the speed test…", "正在测速…"));
+  S.view = ""; FILTERS.forEach(({ f }) => { S[f] = ""; }); S.q = ""; $(".q").value = ""; S.page = 1; update(); await wait(500);
+  const cats = [...new Set(all().map((a) => info(a).category))];
+  const bigStore = [...all().reduce((m, a) => m.set(a.store, (m.get(a.store) || 0) + 1), new Map())].sort((a, b) => b[1] - a[1])[0];
+  await step("click a category", () => { S.cat = cats.includes("Shoes") ? "Shoes" : cats[0]; S.page = 1; update(); });
+  await step("click a store", () => { S.cat = ""; S.store = bigStore ? bigStore[0] : ""; S.page = 1; update(); });
+  await step("clear filters", () => { S.store = ""; S.page = 1; update(); });
+  // Typing "nike" one letter at a time, like a person would.
+  for (const word of ["n", "ni", "nik", "nike"]) {
+    await step(`type "${word}" in search`, () => { $(".q").value = word; $(".q").dispatchEvent(new Event("input")); });
+  }
+  await step("clear search", () => { $(".q").value = ""; $(".q").dispatchEvent(new Event("input")); });
+  await step("next page", () => goToPage(2));
+  await step("sort by brand", () => { S.sort = "brand"; $(".sort").value = "brand"; S.page = 1; renderGrid(); });
+  await step("⟳ refresh (reload library data)", () => refresh());
+  S.sort = "team"; $(".sort").value = "team"; S.page = 1; update();
+  PERF.flush();
+  await wait(1200);
+  location.href = "/debug";
+}
+
 // Start up: load everything, then go back to where you were (if you were here before).
 load().then(() => {
   const scroll = restoreView();
-  renderAll();
+  PERF.time("first draw (sidebar + filters + cards)", renderAll);
   $("main").scrollTop = scroll;
+  // Speed report: from opening the page until the first cards are actually on screen, and memory.
+  PERF.afterPaint(() => {
+    PERF.add("launch → first cards on screen", performance.now(), all().length, "items");
+    if (performance.memory) PERF.add("page memory (MB)", performance.memory.usedJSHeapSize / 1048576);
+  });
   pollNewCheck(); // how the ✨ New Additions check is going
+  if (location.hash === "#speedtest") setTimeout(speedTest, 1500);
 }).catch((e) => toast(L("Couldn't load your library: ", "无法加载你的图库：") + e.message));
 
 // "⬆ Check for updates" (only inside the app window, where updating is possible).

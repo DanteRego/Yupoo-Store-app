@@ -7,13 +7,25 @@
 // so put very specific words (like 足球鞋 = football boots) above general ones (like 鞋 = shoe).
 
 var YO_CATEGORIES = [
-  { name: "Shirts", subs: ["Football Kit", "Fashion Jersey", "T-Shirt", "Polo", "Sweater", "Hoodie", "Jacket", "Blank Teamwear", "Other Shirts"] },
+  { name: "Shirts", subs: ["Football Kit", "Basketball Jersey", "Other Sports Jersey", "Fashion Jersey", "T-Shirt", "Polo", "Sweater",
+    "Hoodie", "Jacket", "Tracksuit", "Blank Teamwear", "Other Shirts"] },
   { name: "Bottoms", subs: ["Shorts", "Pants", "Other Bottoms"] },
   { name: "Shoes", subs: ["Football Boots", "Running Shoes", "Basketball Shoes", "Training Shoes", "Sneakers",
     "Hiking & Trail", "Slides & Sandals", "Boots", "Other Shoes"] },
-  { name: "Bags & Accessories", subs: ["Bags", "Hats", "Socks", "Other Accessories"] },
+  { name: "Bags & Accessories", subs: ["Bags", "Hats", "Socks", "Watches", "Glasses", "Jewelry", "Belts", "Scarves", "Other Accessories"] },
   { name: "Other", subs: ["Size Charts"] }
 ];
+
+// NBA basketball jerseys. Team names alone aren't enough (cap stores list the same team names), so a
+// title needs "NBA", or an NBA team plus a jersey hint (a shirt number, 球衣 = jersey, 赛季 = season,
+// 城市版 = city edition…). Checked before the word list, so 篮球 (basketball) here isn't a shoe.
+var YO_NBA_TEAMS = ["湖人", "勇士", "公牛", "凯尔特人", "76人", "独行侠", "小牛", "马刺", "猛龙", "爵士", "雄鹿", "老鹰",
+  "步行者", "雷霆", "灰熊", "快船", "掘金", "骑士", "火箭", "热火", "尼克斯", "篮网", "蓝网", "太阳", "开拓者", "国王",
+  "鹈鹕", "森林狼", "魔术", "黄蜂", "活塞", "奇才", "超音速"];
+var YO_JERSEY_HINT = /球衣|jersey|\d+\s*[号#]|[号#]\s*\d|赛季|城市版|复古|全明星|背心|短袖|热压|网眼/i;
+// …but not when the title says it's something else (NBA shorts, socks, coats, hoodies, tees, caps, shoes),
+// so those go to their own subcategory.
+var YO_NOT_JERSEY = /球裤|短裤|长裤|卫裤|袜|棉衣|外套|夹克|卫衣|帽|长拉|半拉|圆领|t恤|polo|jacket|hoodie|鞋/i;
 
 // Categories where a football team makes sense (team, season, kit type and extras are only shown for these).
 var YO_CLOTHING = ["Shirts", "Bottoms"];
@@ -65,6 +77,9 @@ var YO_CATEGORY_WORDS = [
   ["马丁靴", "Shoes", "Boots"], ["雪地靴", "Shoes", "Boots"], ["靴", "Shoes", "Boots"], ["boots", "Shoes", "Boots"],
   ["timberland", "Shoes", "Boots"], ["ugg", "Shoes", "Boots"], ["卡特", "Shoes", "Boots"],
 
+  // Jordans written the Chinese way: 乔1 / 乔-11 / 乔十 / 乔丹3代, or AJ4 / AJ11 (no "鞋" in the title).
+  [/乔\s*-?\s*(\d{1,2}|[一二三四五六七八九十]{1,2})(?!\d)|乔丹\s*\d+\s*代|\baj\s?\d/i, "Shoes", "Sneakers"],
+  ["天伯伦", "Shoes", "Boots"],
   ["板鞋", "Shoes", "Sneakers"], ["休闲鞋", "Shoes", "Sneakers"], ["帆布鞋", "Shoes", "Sneakers"], ["老爹鞋", "Shoes", "Sneakers"],
   ["空军", "Shoes", "Sneakers"], ["sneaker", "Shoes", "Sneakers"], ["sneakers", "Shoes", "Sneakers"],
   ["dunk", "Shoes", "Sneakers"], ["air force", "Shoes", "Sneakers"], ["af1", "Shoes", "Sneakers"],
@@ -72,7 +87,7 @@ var YO_CATEGORY_WORDS = [
   ["blazer", "Shoes", "Sneakers"], ["cortez", "Shoes", "Sneakers"], ["samba", "Shoes", "Sneakers"],
   ["gazelle", "Shoes", "Sneakers"], ["campus", "Shoes", "Sneakers"], ["spezial", "Shoes", "Sneakers"],
   ["superstar", "Shoes", "Sneakers"], ["stan smith", "Shoes", "Sneakers"], ["forum", "Shoes", "Sneakers"],
-  ["yeezy", "Shoes", "Sneakers"], ["new balance", "Shoes", "Sneakers"], ["converse", "Shoes", "Sneakers"],
+  ["yeezy", "Shoes", "Sneakers"], ["椰子", "Shoes", "Sneakers"], ["new balance", "Shoes", "Sneakers"], ["converse", "Shoes", "Sneakers"],
   ["vans", "Shoes", "Sneakers"], ["old skool", "Shoes", "Sneakers"], ["golden goose", "Shoes", "Sneakers"],
   ["blazerlow", "Shoes", "Sneakers"], ["sambae", "Shoes", "Sneakers"], ["foamposite", "Shoes", "Sneakers"],
   ["shox", "Shoes", "Sneakers"], ["moon shoe", "Shoes", "Sneakers"], ["initiator", "Shoes", "Sneakers"],
@@ -83,6 +98,8 @@ var YO_CATEGORY_WORDS = [
   ["taekwondo", "Shoes", "Sneakers"], ["air monarch", "Shoes", "Sneakers"], ["trainer", "Shoes", "Sneakers"],
   ["trainers", "Shoes", "Sneakers"], ["court borough", "Shoes", "Sneakers"],
 
+  // Shoe emojis some stores put in titles (👠 heels before 👢, as titles often show both).
+  ["👟", "Shoes", "Sneakers"], ["👠", "Shoes", "Other Shoes"], ["👡", "Shoes", "Slides & Sandals"], ["👢", "Shoes", "Boots"],
   ["球鞋", "Shoes", "Other Shoes"], ["运动鞋", "Shoes", "Other Shoes"], ["鞋", "Shoes", "Other Shoes"],
   ["shoes", "Shoes", "Other Shoes"], ["shoe", "Shoes", "Other Shoes"],
 
@@ -93,13 +110,32 @@ var YO_CATEGORY_WORDS = [
   ["帽子", "Bags & Accessories", "Hats"], ["棒球帽", "Bags & Accessories", "Hats"], ["渔夫帽", "Bags & Accessories", "Hats"],
   ["cap", "Bags & Accessories", "Hats"], ["hat", "Bags & Accessories", "Hats"], ["beanie", "Bags & Accessories", "Hats"],
   ["袜", "Bags & Accessories", "Socks"], ["socks", "Bags & Accessories", "Socks"],
+  ["⌚", "Bags & Accessories", "Watches"], ["watch", "Bags & Accessories", "Watches"], ["watches", "Bags & Accessories", "Watches"],
+  ["手表", "Bags & Accessories", "Watches"], ["腕表", "Bags & Accessories", "Watches"], ["rolex", "Bags & Accessories", "Watches"],
+  ["劳力士", "Bags & Accessories", "Watches"], ["audemars", "Bags & Accessories", "Watches"], ["patek", "Bags & Accessories", "Watches"],
+  ["百达翡丽", "Bags & Accessories", "Watches"], ["richard mille", "Bags & Accessories", "Watches"], ["breguet", "Bags & Accessories", "Watches"],
+  ["👓", "Bags & Accessories", "Glasses"], ["glasses", "Bags & Accessories", "Glasses"], ["sunglasses", "Bags & Accessories", "Glasses"],
+  ["eyewear", "Bags & Accessories", "Glasses"],
+  // 眼镜 = glasses, but not "眼镜连帽卫衣" (a goggle hoodie, CP Company).
+  [/眼镜(?!.*(卫衣|夹克|外套|冲锋衣|开衫))/, "Bags & Accessories", "Glasses"], ["墨镜", "Bags & Accessories", "Glasses"],
+  ["rayban", "Bags & Accessories", "Glasses"], ["ray-ban", "Bags & Accessories", "Glasses"], ["ray ban", "Bags & Accessories", "Glasses"],
+  ["雷朋", "Bags & Accessories", "Glasses"], [/\bRB\s?\d{4}\b/i, "Bags & Accessories", "Glasses"], // Ray-Ban model numbers: RB3016
+  ["jewelry", "Bags & Accessories", "Jewelry"], ["jewellery", "Bags & Accessories", "Jewelry"], ["necklace", "Bags & Accessories", "Jewelry"],
+  ["bracelet", "Bags & Accessories", "Jewelry"], ["earrings", "Bags & Accessories", "Jewelry"], ["earring", "Bags & Accessories", "Jewelry"],
+  ["项链", "Bags & Accessories", "Jewelry"], ["手链", "Bags & Accessories", "Jewelry"], ["手镯", "Bags & Accessories", "Jewelry"],
+  ["耳环", "Bags & Accessories", "Jewelry"], ["戒指", "Bags & Accessories", "Jewelry"], ["首饰", "Bags & Accessories", "Jewelry"],
+  ["belt", "Bags & Accessories", "Belts"], ["belts", "Bags & Accessories", "Belts"], ["皮带", "Bags & Accessories", "Belts"],
+  ["腰带", "Bags & Accessories", "Belts"],
+  ["🧣", "Bags & Accessories", "Scarves"], ["scarf", "Bags & Accessories", "Scarves"], ["scarves", "Bags & Accessories", "Scarves"],
+  ["围巾", "Bags & Accessories", "Scarves"], ["丝巾", "Bags & Accessories", "Scarves"],
+  ["👜", "Bags & Accessories", "Bags"], ["handbag", "Bags & Accessories", "Bags"], ["wallet", "Bags & Accessories", "Bags"],
 
   // ---- Clothing
   ["卫衣", "Shirts", "Hoodie"], ["连帽", "Shirts", "Hoodie"], ["hoodie", "Shirts", "Hoodie"],
   ["毛衣", "Shirts", "Sweater"], ["针织衫", "Shirts", "Sweater"], ["sweater", "Shirts", "Sweater"],
   ["jumper", "Shirts", "Sweater"], ["sweatshirt", "Shirts", "Sweater"],
   ["羽绒", "Shirts", "Jacket"], ["外套", "Shirts", "Jacket"], ["夹克", "Shirts", "Jacket"], ["风衣", "Shirts", "Jacket"],
-  ["棉服", "Shirts", "Jacket"], ["jacket", "Shirts", "Jacket"], ["windbreaker", "Shirts", "Jacket"], ["coat", "Shirts", "Jacket"],
+  ["棉服", "Shirts", "Jacket"], ["棉衣", "Shirts", "Jacket"], ["jacket", "Shirts", "Jacket"], ["windbreaker", "Shirts", "Jacket"], ["coat", "Shirts", "Jacket"],
   ["POLO", "Shirts", "Polo"], ["P O L O", "Shirts", "Polo"], ["PO", "Shirts", "Polo"], ["翻领", "Shirts", "Polo"],
   ["反领", "Shirts", "Polo"],
   // Casual shirts (休闲 = casual, 圆领 = crew neck). Above the fashion-jersey words, so a casual lotus tee is a T-shirt.
@@ -120,7 +156,19 @@ var YO_CATEGORY_WORDS = [
   ["二客", "Shirts", "Football Kit"], ["三客", "Shirts", "Football Kit"], ["特别版", "Shirts", "Football Kit"],
   ["纪念版", "Shirts", "Football Kit"], ["C罗", "Shirts", "Football Kit"], ["梅西", "Shirts", "Football Kit"],
   ["内马尔", "Shirts", "Football Kit"], ["足球", "Shirts", "Football Kit"],
-  ["T恤", "Shirts", "T-Shirt"], ["t-shirt", "Shirts", "T-Shirt"], ["tee", "Shirts", "T-Shirt"],
+  ["T恤", "Shirts", "T-Shirt"], ["t-shirt", "Shirts", "T-Shirt"], ["tee", "Shirts", "T-Shirt"], ["henley", "Shirts", "T-Shirt"],
+  ["henleys", "Shirts", "T-Shirt"], ["crewneck", "Shirts", "Sweater"], ["crew neck", "Shirts", "Sweater"],
+  // Tracksuits. Not 套装 (set: "主场套装" is a kit) or 长拉 / 半拉 (full-zip / half-zip: often a training top,
+  // which counts as a football kit, kit type Training).
+  ["tracksuit", "Shirts", "Tracksuit"], ["track suit", "Shirts", "Tracksuit"],
+  ["jeans", "Bottoms", "Pants"], ["cargos", "Bottoms", "Pants"], ["cargo pants", "Bottoms", "Pants"], ["jorts", "Bottoms", "Shorts"],
+  // American football / baseball / hockey jerseys.
+  ["nfl", "Shirts", "Other Sports Jersey"], ["橄榄球", "Shirts", "Other Sports Jersey"], ["vapor untouchable", "Shirts", "Other Sports Jersey"],
+  ["nhl", "Shirts", "Other Sports Jersey"], ["冰球", "Shirts", "Other Sports Jersey"],
+  // General clothing words ("Burberry clothes", 👕) — only when nothing more exact was found. "generic":
+  // skipped when a football team is in the title, so "弗拉门戈童装 children clothing" stays a kit.
+  ["clothes", "Shirts", "Other Shirts", "generic"], ["clothing", "Shirts", "Other Shirts", "generic"], ["👕", "Shirts", "Other Shirts", "generic"],
+  ["👚", "Shirts", "Other Shirts", "generic"], ["👗", "Shirts", "Other Shirts", "generic"], ["👖", "Bottoms", "Pants", "generic"],
 
   // ---- Brands that (in these stores) mostly mean shoes. They come after the clothing words,
   // so "Gucci 卫衣" is still a hoodie.
@@ -136,8 +184,8 @@ var YO_CATEGORY_WORDS = [
   ["balenciaga", "Shoes", "Sneakers"], ["巴黎世家", "Shoes", "Sneakers"], ["mcqueen", "Shoes", "Sneakers"], ["麦昆", "Shoes", "Sneakers"]
 ];
 
-// Shoe sizes like "36-45", "39~46", "尺码：36 37 38" or "38 39 40 41".
-var YO_SHOE_SIZES = /(?:^|[^\d.])(3[4-9]|4[0-9])(?:\.5)?\s*[-–~至到]\s*(3[5-9]|4[0-9])|(?:尺码|码数|size)\s*[:：]?\s*(3[4-9]|4[0-9])\b|(?:(?:^|\D)(?:3[4-9]|4[0-9])(?:\.5)?\s+){3}/i;
+// Shoe sizes like "36-45", "36--47", "36～47.5", "39~46", "尺码：36 37 38" or "38 39 40 41".
+var YO_SHOE_SIZES = /(?:^|[^\d.])(3[4-9]|4[0-9])(?:\.5)?\s*[-–~～至到]+\s*(3[5-9]|4[0-9])|(?:尺码|码数|size)\s*[:：]?\s*(3[4-9]|4[0-9])\b|(?:(?:^|\D)(?:3[4-9]|4[0-9])(?:\.5)?\s+){3}/i;
 
 // Clothing sizes like "S-4XL", "S到4XL" or "s-3xl".
 var YO_CLOTHING_SIZES = /(?:^|[^a-z])s\s*(?:-|–|~|到|至)\s*\d?x*l(?![a-z])/i;
@@ -153,11 +201,19 @@ function YO_categorize(title, parsed, fixed, storeDefault) {
   var lower = String(title || "").toLowerCase();
   // Shoe sizes in the title (36 37 38…) mean it's a shoe, so clothing words like 休闲 (casual) are skipped.
   var shoeSized = YO_SHOE_SIZES.test(title || "");
+  // NBA jerseys (see YO_NBA_TEAMS). 刺绣 (embroidery) is taken out first: it hides 马刺 (Spurs).
+  var nbaText = lower.replace(/刺绣/g, "");
+  if (!shoeSized && !YO_NOT_JERSEY.test(title || "") && (yoFind(lower, "nba") !== -1 ||
+      (YO_JERSEY_HINT.test(title || "") && YO_NBA_TEAMS.some(function (n) { return nbaText.indexOf(n) !== -1; })))) {
+    return { category: "Shirts", sub: "Basketball Jersey", how: "word", word: "NBA" };
+  }
   for (var k = 0; k < YO_CATEGORY_WORDS.length; k++) {
     var w = YO_CATEGORY_WORDS[k];
-    if (yoFind(lower, w[0]) === -1) continue;
+    // A word is text to find, or a pattern (like the Ray-Ban model numbers).
+    if (typeof w[0] === "string" ? yoFind(lower, w[0]) === -1 : !w[0].test(title || "")) continue;
     if (shoeSized && YO_CLOTHING.indexOf(w[1]) !== -1) continue;
-    return { category: w[1], sub: w[2], how: "word", word: w[0] };
+    if (w[3] === "generic" && parsed && parsed.team) continue;
+    return { category: w[1], sub: w[2], how: "word", word: String(w[0]) };
   }
   if (storeDefault) return split(storeDefault, "store");
   if (YO_SHOE_SIZES.test(title || "")) return { category: "Shoes", sub: "Other Shoes", how: "sizes" };
@@ -189,7 +245,7 @@ function YO_categoryRank(category, sub) {
 function YO_cleanName(title) {
   var t = String(title || "").replace(/\.(jpe?g|png|webp)$/i, "");
   t = t.split(/货号|尺码|码数|size\s*[:：]/i)[0];
-  t = t.replace(/(3[4-9]|4[0-9])(\.5)?\s*[-–~至到]\s*(3[5-9]|4[0-9])(\.5)?/g, " ");
+  t = t.replace(/(3[4-9]|4[0-9])(\.5)?\s*[-–~～至到]+\s*(3[5-9]|4[0-9])(\.5)?/g, " ");
   t = t.replace(/\s+/g, " ").trim();
   return t || String(title || "").trim();
 }

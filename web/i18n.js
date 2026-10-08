@@ -77,6 +77,8 @@ const I18N_ZH = {
   "Sneakers": "运动休闲鞋", "Hiking & Trail": "徒步越野鞋", "Slides & Sandals": "拖鞋凉鞋", "Boots": "靴子", "Other Shoes": "其他鞋",
   "Bags & Accessories": "包和配饰", "Bags": "包", "Hats": "帽子", "Socks": "袜子", "Other Accessories": "其他配饰",
   "Other": "其他", "Size Charts": "尺码表",
+  "Basketball Jersey": "篮球服", "Other Sports Jersey": "其他运动球衣", "Tracksuit": "运动套装",
+  "Watches": "手表", "Glasses": "眼镜", "Jewelry": "首饰", "Belts": "腰带", "Scarves": "围巾",
   // kit types & extras
   "Home": "主场", "Away": "客场", "Second Away": "第二客场", "Third": "第三", "Goalkeeper": "守门员", "Training": "训练服",
   "Pre-Match": "赛前服", "Long Sleeve": "长袖", "Retro": "复古", "Kids": "童装", "Fan Version": "球迷版", "Player Version": "球员版",

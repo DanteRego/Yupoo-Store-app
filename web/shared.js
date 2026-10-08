@@ -35,6 +35,34 @@ async function call(method, path, body, raw) {
   return data;
 }
 
+// ---------- speed measurements (shown on the hidden Speed report page, /debug) ----------
+// PERF.add("name", ms, n, note) records one timing; they're sent to the app in small batches.
+const PERF = {
+  queue: [], timer: null,
+  page: location.pathname === "/" ? "library" : location.pathname.slice(1),
+  add(name, ms, n, note) {
+    this.queue.push({ name, ms: Math.round(ms * 10) / 10, n: n || 0, note: note || "", page: this.page, at: Date.now() });
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.flush(), 1000);
+  },
+  // Times fn() and records it. Returns what fn returns.
+  time(name, fn, n, note) {
+    const t = performance.now();
+    const r = fn();
+    this.add(name, performance.now() - t, typeof n === "function" ? n(r) : n, note);
+    return r;
+  },
+  // How long until the browser has actually drawn the result (after the code finished).
+  afterPaint(cb) { requestAnimationFrame(() => setTimeout(cb, 0)); },
+  flush() {
+    if (!this.queue.length) return;
+    const body = JSON.stringify(this.queue.splice(0));
+    // Plain fetch, not call(): call() would tell other windows the library changed.
+    fetch("/api/perf", { method: "POST", headers: { "X-Kit-Token": TOKEN, "Content-Type": "application/json" }, body }).catch(() => {});
+  }
+};
+window.addEventListener("pagehide", () => PERF.flush());
+
 let toastTimer = null, toastAction = null;
 // A message at the bottom. With actionLabel, it also gets a button (e.g. Undo) and stays a bit longer.
 function toast(msg, actionLabel, action) {
@@ -128,7 +156,9 @@ document.addEventListener("click", (e) => { if (e.target.closest('[data-act="set
 
 let version = -1;
 async function load() {
+  const t0 = performance.now();
   const d = await call("GET", "/api/state");
+  PERF.add("load: download + read library data", performance.now() - t0, Object.keys((d.library || {}).albums || {}).length, "items");
   version = d.version;
   S.lib = d.library || { albums: {} };
   S.aliases = d.aliases || {};
@@ -175,6 +205,8 @@ function info(a) {
     clothing, footballKit: kit, catEdited: c.how === "yours"
   });
   if (!clothing) Object.assign(r, { team: null, season: null, seasonKey: null, kit: null, extras: [] });
+  // Basketball / other sports jerseys: the team list is for football (凯尔特人 is Celtic, not the Celtics).
+  else if (c.sub === "Basketball Jersey" || c.sub === "Other Sports Jersey") Object.assign(r, { team: null, kit: null });
   else if (!kit) r.kit = null;
   if (clothing && a.team) Object.assign(r, { team: a.team, edited: true });
   r.brand = YO_brand(a.title, c.category);

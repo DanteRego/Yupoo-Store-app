@@ -159,6 +159,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("/{$}", static("library.html", "text/html; charset=utf-8"))
 	mux.HandleFunc("/catalog", static("catalog.html", "text/html; charset=utf-8"))
 	mux.HandleFunc("/settings", static("settings.html", "text/html; charset=utf-8"))
+	mux.HandleFunc("/debug", static("debug.html", "text/html; charset=utf-8"))
+	mux.HandleFunc("/debug.js", static("debug.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/settings.js", static("settings.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/i18n.js", static("i18n.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/teams.js", static("teams.js", "text/javascript; charset=utf-8"))
@@ -209,7 +211,28 @@ func (a *App) routes() http.Handler {
 	}
 
 	mux.HandleFunc("GET /api/state", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
-		return a.lib.StateJSON()
+		t := time.Now()
+		b, err := a.lib.StateJSON()
+		perf.add(PerfEntry{Name: "app: build library data for the page", Ms: float64(time.Since(t).Microseconds()) / 1000, N: len(b), Note: "bytes"})
+		return b, err
+	}))
+	// The hidden Speed report (/debug, see perf.go).
+	mux.HandleFunc("GET /api/debug", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		return a.DebugInfo(), nil
+	}))
+	mux.HandleFunc("POST /api/perf", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		var in []PerfEntry
+		if err := decode(r, &in); err != nil {
+			return nil, err
+		}
+		for _, e := range in {
+			perf.add(e)
+		}
+		return true, nil
+	}))
+	mux.HandleFunc("POST /api/perf/clear", api(func(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+		perf.clear()
+		return true, nil
 	}))
 	// "Save whole store" progress. Inside the app window, pages use the kitCrawl* bindings
 	// instead (see main_windows.go); these are for the Mac/Linux test mode.

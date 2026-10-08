@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="kit-token" content="{{TOKEN}}">
+<meta name="kit-lang" content="{{LANG}}">
+<title>Speed report — Yupoo Library</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="settings">
+  <header>
+    <div class="left">
+      <button class="navbtn" data-act="back">◀ Library</button>
+      <h1><img src="icon.svg" alt="">Speed report</h1>
+    </div>
+    <div class="actions">
+      <button class="iconbtn" data-act="theme" title="Light / dark mode"></button>
+    </div>
+  </header>
+  <div class="body">
+    <main class="setpage">
+      <section class="setcard">
+        <h2>Speed report</h2>
+        <p class="hint">How fast the app is on your library. "Run the speed test" opens the Library and does the same few
+          things every time (a category, a store, typing a search word, the next page…), then comes back here — so you can
+          compare the numbers before and after a change. Times are in milliseconds (1000 ms = 1 second).</p>
+        <div class="btnrow">
+          <button data-act="run" class="primary">🏁 Run the speed test</button>
+          <button data-act="reload">⟳ Refresh</button>
+          <button data-act="copy">📋 Copy report</button>
+          <button data-act="clear">Clear</button>
+        </div>
+      </section>
+      <section class="setcard">
+        <h2>Your library</h2>
+        <div class="kv facts"></div>
+      </section>
+      <section class="setcard">
+        <h2>Slowest</h2>
+        <div class="slowest"></div>
+      </section>
+      <section class="setcard">
+        <h2>All timings</h2>
+        <div class="perftable"></div>
+      </section>
+    </main>
+  </div>
+  <div class="toast"></div>
+  <script src="i18n.js"></script>
+  <script src="teams.js"></script>
+  <script src="categories.js"></script>
+  <script src="brands.js"></script>
+  <script src="shared.js"></script>
+  <script src="debug.js"></script>
+</body>
+</html>
