@@ -4,6 +4,13 @@ How to use it: before raising the version, add a section at the TOP that starts 
 "## " and the new version number, then a few short lines. Keep each section under about 600 characters.
 If a version has no section here, the release uses your commit messages instead.
 
+## 2.0.5
+What's new in 2.0.5
+
+- If Yupoo blocks photo downloads made directly (common in mainland China) and you use a VPN or proxy (e.g. Clash), photos now download through it automatically.
+- Update checks and downloads also go through your VPN/proxy when GitHub can't be reached directly.
+- 🩺 Check-up tests photos both ways and shows exactly what Yupoo sends back when it blocks.
+
 ## 2.0.4
 What's new in 2.0.4
 

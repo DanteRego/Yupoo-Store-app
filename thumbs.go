@@ -35,7 +35,7 @@ func (l *Library) thumbWorker() {
 		}
 		for {
 			waitWhileBlocked()
-			data, err := fetchImage(client, job.cover, "https://"+job.host+"/")
+			data, err := fetchPhoto(client, job.cover, "https://"+job.host+"/")
 			if errors.Is(err, errPhotoBlocked) {
 				// Yupoo's photo server is refusing us: pause, then try the same photo again
 				// (instead of racing through the list, which keeps the block going).
@@ -157,7 +157,7 @@ func (l *Library) EnsureThumb(name string) ([]byte, error) {
 	if !PhotoBlockedUntil().IsZero() {
 		return nil, errPhotoBlocked
 	}
-	data, err := fetchImage(onDemandClient, job.cover, "https://"+job.host+"/")
+	data, err := fetchPhoto(onDemandClient, job.cover, "https://"+job.host+"/")
 	if errors.Is(err, errPhotoBlocked) {
 		l.logThumbErr(*job, err)
 		photoBlockedFor()
@@ -169,6 +169,61 @@ func (l *Library) EnsureThumb(name string) ([]byte, error) {
 	out := makeThumb(data)
 	writeThumb(p, out)
 	return out, nil
+}
+
+// photosViaProxy: direct photo downloads were blocked but going through the Windows proxy worked, so
+// photos use the proxy for the rest of this session.
+var photoRoute struct {
+	sync.Mutex
+	viaProxy bool
+}
+
+// fetchPhoto downloads a cover photo: directly, or — when Yupoo's photo server blocks direct downloads
+// (seen in mainland China) and Windows has a proxy set (e.g. a VPN like Clash) — through that proxy.
+func fetchPhoto(direct *http.Client, url, referer string) ([]byte, error) {
+	photoRoute.Lock()
+	useProxy := photoRoute.viaProxy
+	photoRoute.Unlock()
+	if useProxy {
+		if c := viaWindowsProxy(direct.Timeout); c != nil {
+			b, err := fetchImage(c, url, referer)
+			if err == nil || !errors.Is(err, errPhotoBlocked) {
+				return b, err
+			}
+			// Blocked through the proxy too now: go back to trying direct first.
+			photoRoute.Lock()
+			photoRoute.viaProxy = false
+			photoRoute.Unlock()
+		}
+	}
+	b, err := fetchImage(direct, url, referer)
+	if !errors.Is(err, errPhotoBlocked) {
+		return b, err
+	}
+	c := viaWindowsProxy(direct.Timeout)
+	if c == nil {
+		return b, err
+	}
+	b2, err2 := fetchImage(c, url, referer)
+	if err2 != nil {
+		logEvent("photos", "also failed through the Windows proxy %s: %v", winProxyURL(), err2)
+		return b, err
+	}
+	photoRoute.Lock()
+	first := !photoRoute.viaProxy
+	photoRoute.viaProxy = true
+	photoRoute.Unlock()
+	if first {
+		logEvent("photos", "direct photo downloads are blocked, but they work through the Windows proxy %s — using that from now on", winProxyURL())
+	}
+	return b2, nil
+}
+
+// PhotosViaProxy says whether photos are currently downloaded through the Windows proxy (for the check-up).
+func PhotosViaProxy() bool {
+	photoRoute.Lock()
+	defer photoRoute.Unlock()
+	return photoRoute.viaProxy
 }
 
 func fetchImage(client *http.Client, url, referer string) ([]byte, error) {

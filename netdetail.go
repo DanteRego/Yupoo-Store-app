@@ -28,6 +28,7 @@ type FetchError struct {
 	Server      string // e.g. "TencentEdgeOne"
 	RequestID   string // the security service's request ID (EO-LOG-UUID), if any
 	Title       string // the page's title, when a web page came back instead of a photo
+	Snippet     string // the start of that page (spaces squeezed), to see what it is
 	Blocked     bool   // Yupoo's security service refused the request
 	Reason      string // short plain-words reason
 	Err         error  // network error (no answer)
@@ -67,6 +68,9 @@ func (e *FetchError) Error() string {
 	if e.URL != "" {
 		b.WriteString(" — " + e.URL)
 	}
+	if e.Snippet != "" && e.Blocked {
+		b.WriteString(" — page starts: " + e.Snippet)
+	}
 	return b.String()
 }
 
@@ -86,6 +90,13 @@ func describe(u string, res *http.Response, body []byte, took time.Duration, rea
 	}
 	if e.ContentType == "" && len(body) > 0 {
 		e.ContentType = http.DetectContentType(body)
+	}
+	if strings.Contains(strings.ToLower(e.ContentType), "html") || strings.Contains(strings.ToLower(e.ContentType), "text") {
+		s := strings.Join(strings.Fields(string(body)), " ")
+		if r := []rune(s); len(r) > 400 {
+			s = string(r[:400]) + "…"
+		}
+		e.Snippet = s
 	}
 	if m := reTitle.FindSubmatch(body); m != nil {
 		e.Title = strings.TrimSpace(string(m[1]))
@@ -188,4 +199,109 @@ func logEvent(area, format string, args ...interface{}) {
 		_, _ = f.WriteString(line)
 		f.Close()
 	}
+}
+
+// ---------- using the Windows proxy (e.g. a VPN like Clash) as a second route ----------
+// The built-in browser follows the proxy set in Windows' Internet settings, but the app's own downloads
+// go out directly. Where direct downloads are blocked — e.g. Yupoo's photo server in mainland China,
+// or GitHub there — the same request is tried again through that proxy.
+
+// winProxyURL is the Windows proxy as an address the app can use, or nil (none, or only a setup script).
+func winProxyURL() *url.URL {
+	if t := os.Getenv("KIT_TEST_PROXY"); t != "" { // used only for testing
+		u, _ := url.Parse(t)
+		return u
+	}
+	s := strings.TrimSpace(systemProxy())
+	if s == "" || strings.HasPrefix(s, "automatic script") {
+		return nil
+	}
+	addr, scheme := s, "http"
+	if strings.Contains(s, "=") { // "http=127.0.0.1:7890;https=127.0.0.1:7890;socks=127.0.0.1:7891"
+		byKind := map[string]string{}
+		for _, part := range strings.Split(s, ";") {
+			if kv := strings.SplitN(strings.TrimSpace(part), "=", 2); len(kv) == 2 {
+				byKind[strings.ToLower(kv[0])] = kv[1]
+			}
+		}
+		switch {
+		case byKind["https"] != "":
+			addr = byKind["https"]
+		case byKind["http"] != "":
+			addr = byKind["http"]
+		case byKind["socks"] != "":
+			addr, scheme = byKind["socks"], "socks5"
+		default:
+			return nil
+		}
+	}
+	if i := strings.Index(addr, "://"); i >= 0 {
+		scheme, addr = addr[:i], addr[i+3:]
+	}
+	u, err := url.Parse(scheme + "://" + addr)
+	if err != nil || u.Host == "" {
+		return nil
+	}
+	return u
+}
+
+var proxyClients struct {
+	sync.Mutex
+	key string
+	c   map[time.Duration]*http.Client
+}
+
+// viaWindowsProxy is a client that goes through the Windows proxy, or nil if there isn't one.
+func viaWindowsProxy(timeout time.Duration) *http.Client {
+	p := winProxyURL()
+	if p == nil {
+		return nil
+	}
+	proxyClients.Lock()
+	defer proxyClients.Unlock()
+	if proxyClients.key != p.String() {
+		proxyClients.key, proxyClients.c = p.String(), map[time.Duration]*http.Client{}
+	}
+	if c := proxyClients.c[timeout]; c != nil {
+		return c
+	}
+	c := &http.Client{Timeout: timeout, Transport: &http.Transport{Proxy: http.ProxyURL(p), TLSHandshakeTimeout: 15 * time.Second}}
+	proxyClients.c[timeout] = c
+	return c
+}
+
+// doDirectOrProxy sends a request directly and, if that gets no answer or an error answer (common for
+// GitHub in mainland China), sends it again through the Windows proxy when there is one.
+func doDirectOrProxy(timeout time.Duration, newReq func() (*http.Request, error)) (*http.Response, error) {
+	req, err := newReq()
+	if err != nil {
+		return nil, err
+	}
+	// Direct first; give up on it after 30 s without an answer (the proxy may still work).
+	direct := &http.Client{Timeout: timeout, Transport: &http.Transport{Proxy: nil, TLSHandshakeTimeout: 15 * time.Second, ResponseHeaderTimeout: 30 * time.Second}}
+	res, err := direct.Do(req)
+	if err == nil && res.StatusCode < 400 || err == nil && res.StatusCode == http.StatusNotFound {
+		return res, nil
+	}
+	c := viaWindowsProxy(timeout)
+	if c == nil {
+		return res, err
+	}
+	why := "no answer"
+	if err != nil {
+		why = err.Error()
+	} else {
+		why = res.Status
+		res.Body.Close()
+	}
+	req2, e2 := newReq()
+	if e2 != nil {
+		return nil, e2
+	}
+	res2, err2 := c.Do(req2)
+	if err2 != nil {
+		return nil, fmt.Errorf("direct: %s; through the Windows proxy %s: %v", why, winProxyURL(), err2)
+	}
+	logEvent("network", "%s didn't work directly (%s), so it went through the Windows proxy %s (answer: %s)", req2.URL.Host, why, winProxyURL(), res2.Status)
+	return res2, nil
 }

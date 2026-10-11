@@ -14,7 +14,7 @@ import (
 
 // AppVersion is this build's version. When publishing an update, raise it here, build,
 // and make a GitHub release with the same tag (e.g. v1.0.1) — see HOW-TO-TWEAK.txt.
-const AppVersion = "2.0.4"
+const AppVersion = "2.0.5"
 
 // updateRepo is the GitHub project the app checks for new versions on start-up.
 const updateRepo = "DanteRego/Yupoo-Store-app"
@@ -38,14 +38,16 @@ func updateAPI() string {
 // CheckForUpdate asks GitHub for the latest release. It returns nil (and no error) when this
 // copy is already up to date or the project has no releases yet.
 func CheckForUpdate() (*Release, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequest("GET", updateAPI(), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "YupooLibrary/"+AppVersion)
-	res, err := client.Do(req)
+	// Directly, or through the Windows proxy (e.g. a VPN) if GitHub can't be reached directly.
+	res, err := doDirectOrProxy(15*time.Second, func() (*http.Request, error) {
+		req, err := http.NewRequest("GET", updateAPI(), nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("User-Agent", "YupooLibrary/"+AppVersion)
+		return req, nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -144,13 +146,14 @@ func InstallUpdate(rel *Release, exePath string) error {
 }
 
 func download(url, dest string, wantSize int64) error {
-	client := &http.Client{Timeout: 10 * time.Minute}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", "YupooLibrary/"+AppVersion)
-	res, err := client.Do(req)
+	res, err := doDirectOrProxy(10*time.Minute, func() (*http.Request, error) {
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("User-Agent", "YupooLibrary/"+AppVersion)
+		return req, nil
+	})
 	if err != nil {
 		return err
 	}

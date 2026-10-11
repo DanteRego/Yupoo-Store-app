@@ -283,21 +283,46 @@ func (a *App) Diagnose() Diagnosis {
 	if yupooOK && len(samples) > 0 {
 		ok, blockedN := 0, 0
 		var lastErr error
+		proxyClient, proxyOK, viaProxyFine := viaWindowsProxy(12*time.Second), 0, false
 		for _, al := range samples {
 			t0 := time.Now()
 			b, err := fetchImage(client, al.Cover, "https://"+al.Host+"/")
 			if err != nil {
-				detail("Photo %s: %v", al.Cover, err)
+				detail("Photo %s (direct): %v", al.Cover, err)
 				lastErr = err
 				if errors.Is(err, errPhotoBlocked) {
 					blockedN++
 				}
-				continue
+			} else {
+				ok++
+				detail("Photo %s (direct): OK, %.1f KB in %d ms", al.Cover, float64(len(b))/1024, time.Since(t0).Milliseconds())
 			}
-			ok++
-			detail("Photo %s: OK, %.1f KB in %d ms", al.Cover, float64(len(b))/1024, time.Since(t0).Milliseconds())
+			// The same photo through the Windows proxy (e.g. a VPN), when there is one.
+			if proxyClient != nil {
+				t1 := time.Now()
+				if b2, err2 := fetchImage(proxyClient, al.Cover, "https://"+al.Host+"/"); err2 != nil {
+					detail("Photo %s (through Windows proxy %s): %v", al.Cover, winProxyURL(), err2)
+				} else {
+					proxyOK++
+					detail("Photo %s (through Windows proxy %s): OK, %.1f KB in %d ms", al.Cover, winProxyURL(), float64(len(b2))/1024, time.Since(t1).Milliseconds())
+				}
+			}
+		}
+		if proxyClient == nil {
+			detail("Photos through a proxy: not tested (no proxy set in Windows)")
+		}
+		detail("Photo downloads currently go: %s", map[bool]string{true: "through the Windows proxy", false: "directly"}[PhotosViaProxy()])
+		if blockedN > 0 && proxyOK > 0 {
+			add("ok", "Yupoo photos", "Yupoo 图片",
+				fmt.Sprintf("Yupoo blocks photo downloads made directly from this computer (%d of %d), but they work through the proxy set in Windows (%s — e.g. your VPN), so the app downloads photos that way.", blockedN, len(samples), winProxyURL()),
+				fmt.Sprintf("Yupoo 拦截了这台电脑直接下载的图片（%d/%d），但通过 Windows 里设置的代理（%s，比如你的 VPN）可以下载，所以程序会走代理下载图片。", blockedN, len(samples), winProxyURL()))
+			blockedN = 0 // not a problem: photos come through the proxy
+			viaProxyFine = true
+			lastErr = nil
+			ok = len(samples)
 		}
 		switch {
+		case viaProxyFine: // already reported above
 		case blockedN > 0:
 			if PhotoBlockedUntil().IsZero() { // don't make an existing pause longer
 				photoBlockedFor()
