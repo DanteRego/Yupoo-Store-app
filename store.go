@@ -199,6 +199,7 @@ func OpenLibrary(dir, thumbDir string) (*Library, error) {
 	if l.data.StoreFill == nil {
 		l.data.StoreFill = map[string]*StoreFill{}
 	}
+	setAppLogDir(dir) // app-log.txt (problems as they happen; see netdetail.go)
 	l.ensureMyTeamsFile()
 	go l.thumbWorker()
 	go l.shrinkOldThumbs() // once: re-saves photos from before the smaller photo size

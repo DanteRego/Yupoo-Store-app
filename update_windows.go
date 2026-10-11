@@ -34,6 +34,7 @@ func offerUpdate(w webview2.WebView, manual bool) {
 	}
 	rel, err := CheckForUpdate()
 	if err != nil {
+		logEvent("updates", "checking GitHub for a new version: %v", err)
 		if manual {
 			showOnWindow(w, "Yupoo Library", tr("Couldn't check for updates right now — maybe there's no internet connection, or GitHub is busy. Try again in a minute.", "现在无法检查更新——可能没有网络，或者 GitHub 太忙。请过一分钟再试。")+
 				"\n\n("+err.Error()+")", 0x30)

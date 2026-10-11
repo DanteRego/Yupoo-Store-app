@@ -33,13 +33,75 @@ func (l *Library) thumbWorker() {
 		if _, ok := l.findThumb(filepath.Base(p)); ok {
 			continue
 		}
-		data, err := fetchImage(client, job.cover, "https://"+job.host+"/")
-		if err != nil {
-			time.Sleep(300 * time.Millisecond)
-			continue
+		for {
+			waitWhileBlocked()
+			data, err := fetchImage(client, job.cover, "https://"+job.host+"/")
+			if errors.Is(err, errPhotoBlocked) {
+				// Yupoo's photo server is refusing us: pause, then try the same photo again
+				// (instead of racing through the list, which keeps the block going).
+				l.logThumbErr(job, err)
+				photoBlockedFor()
+				continue
+			}
+			if err != nil {
+				l.logThumbErr(job, err)
+				time.Sleep(500 * time.Millisecond)
+				break
+			}
+			photoAllowed()
+			writeThumb(p, makeThumb(data))
+			break
 		}
-		writeThumb(p, makeThumb(data))
-		time.Sleep(80 * time.Millisecond) // be gentle with Yupoo
+		time.Sleep(250 * time.Millisecond) // gentle: about 4 photos a second (too fast gets blocked)
+	}
+}
+
+// ---------- when Yupoo's photo server blocks us ----------
+// Yupoo's photos are behind a security service (Tencent Cloud EdgeOne). If it decides there are too
+// many requests, it answers with a "Restricted Access" page (请求已被站点的安全策略拦截) instead of the
+// photo. Then all photo downloads pause — 2 minutes at first, doubling up to 30 — and try again.
+
+var errPhotoBlocked = errors.New("Yupoo's photo server blocked the request (Restricted Access)")
+
+var (
+	blockMu      sync.Mutex
+	blockedUntil time.Time
+	blockPause   time.Duration
+)
+
+func photoBlockedFor() {
+	blockMu.Lock()
+	if blockPause == 0 {
+		blockPause = 2 * time.Minute
+	} else if blockPause < 30*time.Minute {
+		blockPause *= 2
+		if blockPause > 30*time.Minute {
+			blockPause = 30 * time.Minute
+		}
+	}
+	blockedUntil = time.Now().Add(blockPause)
+	blockMu.Unlock()
+}
+
+func photoAllowed() {
+	blockMu.Lock()
+	blockPause = 0
+	blockMu.Unlock()
+}
+
+// PhotoBlockedUntil is when photo downloads are allowed again (zero time = not blocked). For the check-up.
+func PhotoBlockedUntil() time.Time {
+	blockMu.Lock()
+	defer blockMu.Unlock()
+	if time.Now().After(blockedUntil) {
+		return time.Time{}
+	}
+	return blockedUntil
+}
+
+func waitWhileBlocked() {
+	if until := PhotoBlockedUntil(); !until.IsZero() {
+		time.Sleep(time.Until(until))
 	}
 }
 
@@ -91,10 +153,19 @@ func (l *Library) EnsureThumb(name string) ([]byte, error) {
 	if b, err := os.ReadFile(p); err == nil { // the downloader may have just finished it
 		return b, nil
 	}
+	// While Yupoo is blocking photo downloads, don't ask again (it only makes the block last longer).
+	if !PhotoBlockedUntil().IsZero() {
+		return nil, errPhotoBlocked
+	}
 	data, err := fetchImage(onDemandClient, job.cover, "https://"+job.host+"/")
+	if errors.Is(err, errPhotoBlocked) {
+		l.logThumbErr(*job, err)
+		photoBlockedFor()
+	}
 	if err != nil {
 		return nil, err
 	}
+	photoAllowed()
 	out := makeThumb(data)
 	writeThumb(p, out)
 	return out, nil
@@ -114,20 +185,29 @@ func fetchImage(client *http.Client, url, referer string) ([]byte, error) {
 	req.Header.Set("Referer", referer)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36 Edg/128.0")
 	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+	t0 := time.Now()
 	res, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, netErr(url, err, time.Since(t0))
 	}
 	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return nil, errors.New(res.Status)
-	}
 	b, err := io.ReadAll(io.LimitReader(res.Body, 15<<20))
-	if err != nil || len(b) == 0 {
-		return nil, errors.New("empty image")
+	took := time.Since(t0)
+	ct := http.DetectContentType(b)
+	// A web page instead of a photo (status 567 or even 200) is Yupoo's security service blocking us.
+	if res.StatusCode == 567 || strings.HasPrefix(ct, "text/html") {
+		e := describe(url, res, b, took, "a web page came back instead of the photo (most likely Yupoo's security service blocking)")
+		e.Blocked = true
+		return nil, e
 	}
-	if ct := http.DetectContentType(b); len(ct) < 6 || ct[:6] != "image/" {
-		return nil, errors.New("not an image: " + ct)
+	if res.StatusCode != 200 {
+		return nil, describe(url, res, b, took, "the photo server answered with an error")
+	}
+	if err != nil || len(b) == 0 {
+		return nil, describe(url, res, b, took, "the photo came back empty or cut off")
+	}
+	if len(ct) < 6 || ct[:6] != "image/" {
+		return nil, describe(url, res, b, took, "what came back isn't a picture ("+ct+")")
 	}
 	return b, nil
 }
@@ -260,4 +340,10 @@ func (l *Library) shrinkOldThumbs() {
 	shrinkMu.Lock()
 	shrinkSt.Running, shrinkSt.Finished = false, true
 	shrinkMu.Unlock()
+}
+
+// logThumbErr notes a failed photo download in the app log (app-log.txt), with full details.
+// While Yupoo is blocking, the same problem is written only once a minute, not once per photo.
+func (l *Library) logThumbErr(job thumbJob, err error) {
+	logEvent("photos", "%s: %v", job.key, err)
 }

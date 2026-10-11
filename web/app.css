@@ -274,3 +274,7 @@ button.primary { background: var(--green); color: #fff; font-weight: 600; }
 .editrow .field { flex: 1; min-width: 0; }
 .clothingonly { display: flex; flex-direction: column; gap: 10px; }
 .clothingonly[hidden] { display: none; }
+/* Check-up: technical details (fold-out) */
+.diagdetails { margin-top: 6px; font-size: 12px; }
+.diagdetails summary { cursor: pointer; color: var(--muted); padding: 6px 2px; }
+.diagdetails pre { white-space: pre-wrap; word-break: break-word; background: var(--soft); border-radius: 8px; padding: 10px; max-height: 420px; overflow: auto; font: 12px/1.45 Consolas, "Courier New", monospace; }

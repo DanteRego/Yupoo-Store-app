@@ -191,6 +191,7 @@ func (c *Crawler) run(list *url.URL, cookie string, stop chan struct{}) {
 		c.update(func(s *CrawlStatus) { s.Page = page })
 		body, err := fetchPage(pageURLFor(list, page), origin+"/", cookie)
 		if err != nil {
+			logEvent("save whole store", "%s page %d: %v", host, page, err)
 			c.finish("blocked", "Yupoo stopped answering on page "+strconv.Itoa(page)+". Wait a minute, then try again — saved items are kept.", true)
 			return
 		}
@@ -242,15 +243,17 @@ func fetchPage(pageURL, referer, cookie string) (string, error) {
 	if cookie != "" {
 		req.Header.Set("Cookie", cookie)
 	}
+	t0 := time.Now()
 	res, err := crawlClient.Do(req)
 	if err != nil {
-		return "", err
+		return "", netErr(pageURL, err, time.Since(t0))
 	}
 	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return "", errors.New(res.Status)
-	}
 	b, err := io.ReadAll(io.LimitReader(res.Body, 20<<20))
+	if res.StatusCode != 200 {
+		// Full details (answer code, server, request ID, page title) for the app log and check-up.
+		return "", describe(pageURL, res, b, time.Since(t0), "the store page answered with an error")
+	}
 	return string(b), err
 }
 

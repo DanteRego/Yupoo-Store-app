@@ -275,6 +275,7 @@ func (c *NewChecker) checkStores(hosts []string) bool {
 			c.pace()
 			body, err := fetchPage(pageURLFor(list, page), "https://"+host+"/", cookie)
 			if err != nil {
+				logEvent("new additions", "checking %s page %d: %v", host, page, err)
 				failed = true
 				break
 			}
@@ -384,6 +385,7 @@ func (c *NewChecker) fillStore(host string) bool {
 		c.pace()
 		body, err := fetchPage(pageURLFor(list, page), "https://"+host+"/", cookie)
 		if err != nil {
+			logEvent("new additions", "filling in %s page %d: %v", host, page, err)
 			c.update(func(s *NewCheckStatus) { s.Failed = true })
 			return false // carries on from this page next time
 		}
@@ -468,6 +470,7 @@ func (a *App) EnterStorePassword(store, pw string) error {
 	}
 	needs, valid, err := checkStorePassword(store, pw)
 	if err != nil {
+		logEvent("passwords", "checking the password for %s: %v", store, err)
 		return errors.New("Couldn't reach Yupoo to check the password: " + err.Error())
 	}
 	if needs && !valid {

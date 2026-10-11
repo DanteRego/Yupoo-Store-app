@@ -193,7 +193,9 @@ async function runCheckup(btn) {
       ? L(`Found ${problems} thing${problems === 1 ? "" : "s"} to look at.`, `发现 ${problems} 个需要注意的地方。`)
       : L("Everything looks fine.", "一切正常。")}</div>` +
       d.checks.map((c) => `<div class="diagrow ${c.status}"><span class="ic">${icon[c.status]}</span>
-        <span class="txt"><b>${esc(L(c.name, c.nameZh))}</b><br>${esc(L(c.detail, c.detailZh))}</span></div>`).join("");
+        <span class="txt"><b>${esc(L(c.name, c.nameZh))}</b><br>${esc(L(c.detail, c.detailZh))}</span></div>`).join("") +
+      // Everything measured, for working out a problem (also in 📋 Copy report).
+      `<details class="diagdetails"><summary>${L("Technical details (for working out problems)", "技术细节（用于排查问题）")}</summary><pre>${esc((d.details || []).join("\n").trim())}</pre></details>`;
     $('[data-act="copyreport"]').hidden = false;
   } catch (e) {
     box.innerHTML = `<div class="diagrow fail"><span class="ic">❌</span><span class="txt">${esc(L("The check-up itself failed: ", "检查本身失败了：") + e.message)}</span></div>`;
@@ -205,14 +207,19 @@ async function runCheckup(btn) {
 async function copyReport() {
   if (!lastReport) return;
   const icon = { ok: "OK  ", warn: "WARN", fail: "FAIL" };
+  // Always in English (whatever the app's language), so it can be read by whoever helps.
   const text = [`Yupoo Library ${lastReport.version} — check-up ${lastReport.time} (${lastReport.system})`, ""]
-    .concat(lastReport.checks.map((c) => `[${icon[c.status]}] ${c.name}: ${c.detail}`)).join("\n");
+    .concat(lastReport.checks.map((c) => `[${icon[c.status]}] ${c.name}: ${c.detail}`))
+    .concat(["", "---------- Technical details ----------"], lastReport.details || []).join("\r\n");
   try {
     await navigator.clipboard.writeText(text);
     toast(L("Report copied — paste it wherever you're asking for help.", "报告已复制——粘贴到你求助的地方即可。"));
   } catch (e) {
-    // Clipboard not allowed: show it so it can be copied by hand.
-    prompt(L("Copy this report:", "复制这份报告："), text);
+    // Clipboard not allowed: save it as a file in Downloads instead (it's too long to show in a box).
+    try {
+      const res = await call("POST", "/api/save-file", { name: `yupoo-library-checkup-${today()}.txt`, content: text });
+      toast(L(`Report saved to ${res.path} — send that file.`, `报告已保存到 ${res.path}——把这个文件发过来即可。`));
+    } catch (err) { prompt(L("Copy this report:", "复制这份报告："), text); }
   }
 }
 

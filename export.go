@@ -62,6 +62,7 @@ func (e *exporter) start(lib *Library) ExportStatus {
 		e.st.Running, e.st.Finished = false, true
 		if err != nil {
 			e.st.Error = err.Error()
+			logEvent("export", "Export Saved Data failed: %v", err)
 		} else {
 			e.st.Path = p
 		}

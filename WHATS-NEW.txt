@@ -4,6 +4,13 @@ How to use it: before raising the version, add a section at the TOP that starts 
 "## " and the new version number, then a few short lines. Keep each section under about 600 characters.
 If a version has no section here, the release uses your commit messages instead.
 
+## 2.0.4
+What's new in 2.0.4
+
+- Photos: if Yupoo's photo server blocks downloads ("Restricted Access", common in mainland China), the app now pauses and tries again later instead of failing, and downloads more gently so it happens less.
+- 🩺 Check-up is much more detailed: it tests store pages, photos and addresses, explains blocks in plain words, and "📋 Copy report" includes full technical details and a log of recent problems.
+- New Additions: "◀ All items" is now at the top left, by the logo.
+
 ## 2.0.3
 What's new in 2.0.3
 
